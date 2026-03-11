@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: kidscode-postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: kidscode
+      POSTGRES_PASSWORD: kidscode
+      POSTGRES_DB: kidscode
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

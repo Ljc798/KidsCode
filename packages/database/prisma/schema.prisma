@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      UserRole
+  createdAt DateTime @default(now())
+
+  student Student?
+  parent  Parent?
+}
+
+model Student {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  nickname  String
+  age       Int?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  parentId String?
+  parent   Parent? @relation(fields: [parentId], references: [id])
+
+  gameSessions GameSession[]
+  progress     LearningProgress[]
+}
+
+model Parent {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  children Student[]
+}
+
+model Course {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  games Game[]
+}
+
+model Game {
+  id        String   @id @default(uuid())
+  title     String
+  courseId  String
+  createdAt DateTime @default(now())
+
+  course Course @relation(fields: [courseId], references: [id])
+
+  sessions GameSession[]
+}
+
+model GameSession {
+  id        String   @id @default(uuid())
+  studentId String
+  gameId    String
+  score     Int
+  playedAt  DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id])
+  game    Game    @relation(fields: [gameId], references: [id])
+}
+
+model LearningProgress {
+  id        String   @id @default(uuid())
+  studentId String
+  courseId  String
+  progress  Int
+  updatedAt DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id])
+}
+
+enum UserRole {
+  STUDENT
+  PARENT
+  ADMIN
+}
