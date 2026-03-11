@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 
 export default function TopNav({
   active
@@ -30,8 +31,8 @@ export default function TopNav({
     <header className="sticky top-0 z-20 border-b border-black/5 bg-white/60 backdrop-blur dark:border-white/10 dark:bg-zinc-950/50">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-[conic-gradient(from_90deg,theme(colors.fuchsia.400),theme(colors.amber.400),theme(colors.lime.400),theme(colors.sky.400),theme(colors.fuchsia.400))] shadow-sm">
-            <span className="h-7 w-7 rounded-xl bg-white/80 dark:bg-zinc-950/70" />
+          <span className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white/70 shadow-sm dark:border-white/10 dark:bg-white/5">
+            <Image src="/logo.png" alt="KidsCode" width={36} height={36} />
           </span>
           <span className="text-base font-extrabold tracking-tight">
             KidsCode
