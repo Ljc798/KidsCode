@@ -9,10 +9,10 @@ datasource db {
 
 model User {
   id        String   @id @default(uuid())
-  email     String   @unique
+  phone     String   @unique
   password  String
   role      UserRole
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   student Student?
   parent  Parent?
@@ -22,8 +22,8 @@ model Student {
   id        String   @id @default(uuid())
   userId    String   @unique
   nickname  String
-  age       Int?
-  createdAt DateTime @default(now())
+  age       Int
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id])
 
@@ -37,7 +37,7 @@ model Student {
 model Parent {
   id        String   @id @default(uuid())
   userId    String   @unique
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id])
 
@@ -48,7 +48,7 @@ model Course {
   id          String   @id @default(uuid())
   title       String
   description String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
 
   games Game[]
 }
@@ -57,7 +57,7 @@ model Game {
   id        String   @id @default(uuid())
   title     String
   courseId  String
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   course Course @relation(fields: [courseId], references: [id])
 
@@ -69,7 +69,7 @@ model GameSession {
   studentId String
   gameId    String
   score     Int
-  playedAt  DateTime @default(now())
+  playedAt  DateTime @default(now()) @db.Timestamptz(3)
 
   student Student @relation(fields: [studentId], references: [id])
   game    Game    @relation(fields: [gameId], references: [id])
@@ -80,13 +80,45 @@ model LearningProgress {
   studentId String
   courseId  String
   progress  Int
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   student Student @relation(fields: [studentId], references: [id])
+}
+
+model MiniGame {
+  slug      String   @id
+  title     String
+  emoji     String
+  blurb     String
+  requires  Concept
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+}
+
+model KnowledgeArticle {
+  slug        String            @id
+  language    KnowledgeLanguage
+  title       String
+  summary     String?
+  contentMd   String
+  order       Int               @default(0)
+  isPublished Boolean           @default(true)
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
 }
 
 enum UserRole {
   STUDENT
   PARENT
   ADMIN
+}
+
+enum Concept {
+  BRANCH
+  LOOP
+}
+
+enum KnowledgeLanguage {
+  CPP
 }
