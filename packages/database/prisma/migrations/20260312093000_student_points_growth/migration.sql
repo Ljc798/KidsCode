@@ -1,0 +1,20 @@
+-- Student balances + growth fields (idempotent)
+
+ALTER TABLE "Student"
+  ADD COLUMN IF NOT EXISTS "className" TEXT;
+
+ALTER TABLE "Student"
+  ADD COLUMN IF NOT EXISTS "pointsBalance" INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE "Student"
+  ADD COLUMN IF NOT EXISTS "starCoinsBalance" INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE "Student"
+  ADD COLUMN IF NOT EXISTS "dailyPointsDate" TEXT;
+
+ALTER TABLE "Student"
+  ADD COLUMN IF NOT EXISTS "dailyPointsEarned" INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE "Student"
+  ADD COLUMN IF NOT EXISTS "xp" INTEGER NOT NULL DEFAULT 0;
+

@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { apiFetch } from "@/app/lib/api"
-import { formatShanghaiDateTime } from "@/app/lib/time"
 
 type Student = {
   id: string
-  phone: string
+  account: string
   nickname: string
   age: number
+  className: string | null
+  concept: "BRANCH" | "LOOP"
   createdAt: string
 }
 
@@ -55,14 +56,15 @@ export default function StudentsPage() {
     const q = query.trim().toLowerCase()
     if (!q) return true
     return (
-      s.phone.toLowerCase().includes(q) ||
+      s.account.toLowerCase().includes(q) ||
       s.nickname.toLowerCase().includes(q) ||
+      (s.className ?? "").toLowerCase().includes(q) ||
       String(s.age).includes(q)
     )
   })
 
   return (
-    <div className="rounded-2xl border border-black/5 bg-white/70 p-6 shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-950/60">
+    <div className="rounded-2xl border border-black/10 bg-white/80 p-6 shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-950/60">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Students</h1>
@@ -74,7 +76,7 @@ export default function StudentsPage() {
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search phone / nickname / age"
+            placeholder="Search account / nickname / age"
             className="h-10 w-full rounded-xl border border-black/10 bg-white/70 px-3 text-sm outline-none ring-0 placeholder:text-zinc-400 focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/40 dark:placeholder:text-zinc-500 sm:w-64"
           />
           <Link
@@ -92,11 +94,13 @@ export default function StudentsPage() {
         </div>
       ) : null}
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-black/5 dark:border-white/10">
-        <div className="grid grid-cols-12 gap-2 bg-zinc-950/5 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:bg-white/5 dark:text-zinc-200">
-          <div className="col-span-5">Phone</div>
+      <div className="mt-5 overflow-hidden rounded-2xl border border-black/10 dark:border-white/10">
+        <div className="grid grid-cols-12 gap-2 bg-zinc-950/10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:bg-white/5 dark:text-zinc-200">
+          <div className="col-span-3">Account</div>
           <div className="col-span-3">Nickname</div>
+          <div className="col-span-1">Progress</div>
           <div className="col-span-1 text-right">Age</div>
+          <div className="col-span-1">Class</div>
           <div className="col-span-2">Created</div>
           <div className="col-span-1 text-right">Actions</div>
         </div>
@@ -110,23 +114,29 @@ export default function StudentsPage() {
             No students found.
           </div>
         ) : (
-          <div className="divide-y divide-black/5 bg-white/40 text-sm dark:divide-white/10 dark:bg-zinc-950/40">
+          <div className="divide-y divide-black/10 bg-white/50 text-sm dark:divide-white/10 dark:bg-zinc-950/40">
             {filtered.map(student => (
               <div
                 key={student.id}
                 className="grid grid-cols-12 items-center gap-2 px-4 py-3"
               >
-                <div className="col-span-5 truncate font-medium text-zinc-950 dark:text-white">
-                  {student.phone}
+                <div className="col-span-3 truncate font-medium text-zinc-950 dark:text-white">
+                  {student.account}
                 </div>
                 <div className="col-span-3 truncate text-zinc-700 dark:text-zinc-200">
                   {student.nickname}
                 </div>
+                <div className="col-span-1 truncate text-xs font-semibold text-zinc-700 dark:text-zinc-200">
+                  {student.concept === "LOOP" ? "循环" : "分支"}
+                </div>
                 <div className="col-span-1 text-right tabular-nums text-zinc-700 dark:text-zinc-200">
                   {student.age}
                 </div>
+                <div className="col-span-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                  {student.className ?? "-"}
+                </div>
                 <div className="col-span-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  {formatShanghaiDateTime(student.createdAt)}
+                  {new Date(student.createdAt).toLocaleDateString()}
                 </div>
                 <div className="col-span-1 flex justify-end gap-2">
                   <Link

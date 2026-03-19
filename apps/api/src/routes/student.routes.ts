@@ -1,18 +1,37 @@
 import { Router } from "express"
 import { prisma } from "@kidscode/database"
+import { requireAdmin } from "../middleware/requireAdmin"
 
 const router = Router()
 
+// Admin-only: student account management
+router.use(requireAdmin)
+
 type StudentDTO = {
   id: string
-  phone: string
+  account: string
   nickname: string
   age: number
+  className: string | null
+  concept: "BRANCH" | "LOOP"
   createdAt: string
 }
 
 const asString = (value: unknown) =>
   typeof value === "string" ? value.trim() : ""
+
+function normalizeAccount(input: string) {
+  return input.trim().toLowerCase()
+}
+
+function isValidAccount(value: string) {
+  // Letters/numbers + _ and -, stored in lowercase by normalizeAccount().
+  return /^[a-z0-9_-]{1,32}$/.test(value)
+}
+
+function isConcept(value: unknown): value is "BRANCH" | "LOOP" {
+  return value === "BRANCH" || value === "LOOP"
+}
 
 const asNumber = (value: unknown) => {
   if (typeof value === "number" && Number.isFinite(value)) return value
@@ -27,13 +46,17 @@ const serializeStudent = (student: {
   id: string
   age: number
   nickname: string
+  className: string | null
+  concept: "BRANCH" | "LOOP"
   createdAt: Date
-  user: { phone: string }
+  user: { account: string | null; phone: string | null }
 }): StudentDTO => ({
   id: student.id,
-  phone: student.user.phone,
+  account: student.user.account ?? student.user.phone ?? "",
   nickname: student.nickname,
   age: student.age,
+  className: student.className,
+  concept: student.concept,
   createdAt: student.createdAt.toISOString()
 })
 
@@ -48,40 +71,54 @@ const asyncHandler =
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    const phone = asString(req.body?.phone)
-    const password = asString(req.body?.password)
+    const account = normalizeAccount(asString(req.body?.account ?? req.body?.phone))
+    const password =
+      req.body?.password === undefined ? "123456" : asString(req.body?.password)
     const nickname = asString(req.body?.nickname)
     const age = asNumber(req.body?.age)
+    const className =
+      req.body?.className === undefined ? null : asString(req.body?.className)
+    const conceptRaw = req.body?.concept
+    const concept = conceptRaw === undefined ? "BRANCH" : conceptRaw
 
-    if (!phone) return res.status(400).json({ error: "phone is required" })
-    if (!/^1\d{10}$/.test(phone))
-      return res.status(400).json({ error: "phone must be a valid CN mobile number" })
-    if (!password) return res.status(400).json({ error: "password is required" })
+    if (!account) return res.status(400).json({ error: "account is required" })
+    if (!isValidAccount(account)) {
+      return res.status(400).json({
+        error: "account must be 1-32 chars of letters/numbers/_/-"
+      })
+    }
+    if (!password) return res.status(400).json({ error: "password cannot be empty" })
     if (!nickname) return res.status(400).json({ error: "nickname is required" })
     if (!Number.isInteger(age) || age <= 0)
       return res.status(400).json({ error: "age must be a positive integer" })
+    if (className !== null && !className)
+      return res.status(400).json({ error: "className cannot be empty" })
+    if (!isConcept(concept))
+      return res.status(400).json({ error: "concept must be BRANCH or LOOP" })
 
     try {
       const student = await prisma.student.create({
         data: {
           age,
           nickname,
+          className,
+          concept,
           user: {
             create: {
-              phone,
+              account,
               password,
               role: "STUDENT"
             }
           }
         },
-        include: { user: { select: { phone: true } } }
+        include: { user: { select: { phone: true, account: true } } }
       })
 
       res.json(serializeStudent(student))
     } catch (e: any) {
       // Prisma unique constraint violation
       if (e?.code === "P2002") {
-        return res.status(409).json({ error: "phone already exists" })
+        return res.status(409).json({ error: "account already exists" })
       }
       throw e
     }
@@ -94,7 +131,7 @@ router.get(
   asyncHandler(async (_, res) => {
     const students = await prisma.student.findMany({
       orderBy: { createdAt: "desc" },
-      include: { user: { select: { phone: true } } }
+      include: { user: { select: { phone: true, account: true } } }
     })
     res.json(students.map(serializeStudent))
   })
@@ -109,7 +146,7 @@ router.get(
 
     const student = await prisma.student.findUnique({
       where: { id },
-      include: { user: { select: { phone: true } } }
+      include: { user: { select: { phone: true, account: true } } }
     })
 
     if (!student) return res.status(404).json({ error: "not found" })
@@ -124,16 +161,29 @@ router.patch(
     const id = asString(req.params.id)
     if (!id) return res.status(400).json({ error: "invalid id" })
 
-    const phone = req.body?.phone === undefined ? undefined : asString(req.body.phone)
+    const accountRaw =
+      req.body?.account === undefined
+        ? req.body?.phone === undefined
+          ? undefined
+          : asString(req.body.phone)
+        : asString(req.body.account)
     const password =
       req.body?.password === undefined ? undefined : asString(req.body.password)
     const nickname = req.body?.nickname === undefined ? undefined : asString(req.body.nickname)
     const age = req.body?.age === undefined ? undefined : asNumber(req.body.age)
+    const classNameRaw =
+      req.body?.className === undefined ? undefined : asString(req.body.className)
+    const conceptRaw = req.body?.concept === undefined ? undefined : req.body.concept
 
-    if (phone !== undefined) {
-      if (!phone) return res.status(400).json({ error: "phone cannot be empty" })
-      if (!/^1\d{10}$/.test(phone))
-        return res.status(400).json({ error: "phone must be a valid CN mobile number" })
+    const account =
+      accountRaw === undefined ? undefined : normalizeAccount(accountRaw)
+    if (account !== undefined) {
+      if (!account) return res.status(400).json({ error: "account cannot be empty" })
+      if (!isValidAccount(account)) {
+        return res.status(400).json({
+          error: "account must be 1-32 chars of letters/numbers/_/-"
+        })
+      }
     }
     if (password !== undefined && !password)
       return res.status(400).json({ error: "password cannot be empty" })
@@ -141,6 +191,13 @@ router.patch(
       return res.status(400).json({ error: "nickname cannot be empty" })
     if (age !== undefined && (!Number.isInteger(age) || age <= 0))
       return res.status(400).json({ error: "age must be a positive integer" })
+    const className = classNameRaw === undefined ? undefined : classNameRaw
+    if (className !== undefined && !className)
+      return res.status(400).json({ error: "className cannot be empty" })
+    const concept = conceptRaw === undefined ? undefined : conceptRaw
+    if (concept !== undefined && !isConcept(concept)) {
+      return res.status(400).json({ error: "concept must be BRANCH or LOOP" })
+    }
 
     // Ensure exists and get userId for update/delete safety
     const existing = await prisma.student.findUnique({
@@ -155,20 +212,22 @@ router.patch(
         data: {
           ...(age === undefined ? {} : { age }),
           ...(nickname === undefined ? {} : { nickname }),
+          ...(className === undefined ? {} : { className }),
+          ...(concept === undefined ? {} : { concept }),
           user: {
             update: {
-              ...(phone === undefined ? {} : { phone }),
+              ...(account === undefined ? {} : { account }),
               ...(password === undefined ? {} : { password })
             }
           }
         },
-        include: { user: { select: { phone: true } } }
+        include: { user: { select: { phone: true, account: true } } }
       })
 
       res.json(serializeStudent(updated))
     } catch (e: any) {
       if (e?.code === "P2002") {
-        return res.status(409).json({ error: "phone already exists" })
+        return res.status(409).json({ error: "account already exists" })
       }
       throw e
     }

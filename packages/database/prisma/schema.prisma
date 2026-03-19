@@ -9,7 +9,8 @@ datasource db {
 
 model User {
   id        String   @id @default(uuid())
-  phone     String   @unique
+  phone     String?  @unique
+  account   String?  @unique
   password  String
   role      UserRole
   createdAt DateTime @default(now()) @db.Timestamptz(3)
@@ -23,6 +24,15 @@ model Student {
   userId    String   @unique
   nickname  String
   age       Int
+  className String?
+  pointsBalance Int @default(0)
+  starCoinsBalance Int @default(0)
+  dailyPointsDate String?
+  dailyPointsEarned Int @default(0)
+  xp Int @default(0)
+  concept Concept @default(BRANCH)
+  gamesCompleted Int @default(0)
+  codeSubmissions Int @default(0)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id])
@@ -32,6 +42,8 @@ model Student {
 
   gameSessions GameSession[]
   progress     LearningProgress[]
+  activities   StudentActivity[]
+  exerciseSubmissions ExerciseSubmission[]
 }
 
 model Parent {
@@ -121,4 +133,85 @@ enum Concept {
 
 enum KnowledgeLanguage {
   CPP
+}
+
+enum StudentActivityKind {
+  MINIGAME_PLAY
+  CODE_SUBMIT
+  POINTS_AWARD
+}
+
+model StudentActivity {
+  id             String              @id @default(uuid())
+  studentId      String
+  kind           StudentActivityKind
+  miniGameSlug   String?
+  ok             Boolean?
+  pointsRequested Int?
+  pointsAdded    Int?
+  code           String?
+  meta           Json?
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@index([studentId, createdAt])
+  @@index([kind, createdAt])
+  @@index([miniGameSlug, createdAt])
+}
+
+model ExerciseBank {
+  id            String   @id @default(uuid())
+  slug          String   @unique
+  title         String
+  summary       String?
+  imageUrl      String?
+  level         Int
+  multipleChoice Json
+  codingTasks    Json?
+  codingTitle   String
+  codingPrompt  String
+  codingPlaceholder String?
+  isPublished   Boolean  @default(true)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  submissions ExerciseSubmission[]
+
+  @@index([level, isPublished])
+  @@index([createdAt])
+}
+
+model ExerciseSubmission {
+  id                  String   @id @default(uuid())
+  exerciseBankId      String
+  studentId           String
+  multipleChoiceAnswers Json
+  multipleChoiceFeedback Json?
+  multipleChoiceScore Int
+  multipleChoiceTotal Int
+  multipleChoicePoints Int @default(0)
+  codingPoints        Int @default(0)
+  codingMaxPoints     Int @default(0)
+  totalPoints         Int @default(0)
+  totalMaxPoints      Int @default(100)
+  codingAnswer        String
+  codingAnswers       Json?
+  codingStatus        ExerciseCodingStatus @default(PENDING)
+  codingIsCorrect     Boolean?
+  teacherFeedback     String?
+  createdAt           DateTime @default(now()) @db.Timestamptz(3)
+  reviewedAt          DateTime? @db.Timestamptz(3)
+
+  exerciseBank ExerciseBank @relation(fields: [exerciseBankId], references: [id])
+  student      Student      @relation(fields: [studentId], references: [id])
+
+  @@index([studentId, createdAt])
+  @@index([exerciseBankId, createdAt])
+  @@index([codingStatus, createdAt])
+}
+
+enum ExerciseCodingStatus {
+  PENDING
+  REVIEWED
 }

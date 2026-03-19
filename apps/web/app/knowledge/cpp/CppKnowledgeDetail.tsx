@@ -16,7 +16,8 @@ type Item = {
 
 function renderMarkdownLite(md: string) {
   // Minimal renderer: supports fenced code blocks ```lang ... ```
-  const parts = md.split("```")
+  const normalized = md.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n")
+  const parts = normalized.split("```")
   return parts.map((chunk, i) => {
     const isCode = i % 2 === 1
     if (!isCode) {
@@ -128,4 +129,3 @@ export default function CppKnowledgeDetail({ slug }: { slug: string }) {
     </article>
   )
 }
-

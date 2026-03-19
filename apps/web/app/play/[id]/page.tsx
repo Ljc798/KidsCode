@@ -1,5 +1,11 @@
 import Link from "next/link"
 import TopNav from "@/app/components/TopNav"
+import TreasureChoicesClient from "@/app/play/treasure-choices/TreasureChoicesClient"
+import WeatherOutfitClient from "@/app/play/weather-outfit/WeatherOutfitClient"
+import MonsterAvoidClient from "@/app/play/monster-avoid/MonsterAvoidClient"
+import StarCollectorClient from "@/app/play/star-collector/StarCollectorClient"
+import RobotGardenerClient from "@/app/play/robot-gardener/RobotGardenerClient"
+import DrumBeatClient from "@/app/play/drum-beat/DrumBeatClient"
 
 export default async function PlayPage({
   params,
@@ -11,6 +17,72 @@ export default async function PlayPage({
   const { id } = await params
   const sp = await searchParams
   const mode = sp.mode === "code" ? "code" : "direct"
+
+  if (id === "treasure-choices") {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.100),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.100),transparent)] dark:bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.950),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.950),transparent)]">
+        <TopNav />
+        <main className="mx-auto max-w-4xl px-4 py-10">
+          <TreasureChoicesClient />
+        </main>
+      </div>
+    )
+  }
+
+  if (id === "weather-outfit") {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.100),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.100),transparent)] dark:bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.950),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.950),transparent)]">
+        <TopNav />
+        <main className="mx-auto max-w-4xl px-4 py-10">
+          <WeatherOutfitClient />
+        </main>
+      </div>
+    )
+  }
+
+  if (id === "monster-avoid") {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.100),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.100),transparent)] dark:bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.950),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.950),transparent)]">
+        <TopNav />
+        <main className="mx-auto max-w-4xl px-4 py-10">
+          <MonsterAvoidClient />
+        </main>
+      </div>
+    )
+  }
+
+  if (id === "star-collector") {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.100),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.100),transparent)] dark:bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.950),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.950),transparent)]">
+        <TopNav />
+        <main className="mx-auto max-w-4xl px-4 py-10">
+          <StarCollectorClient />
+        </main>
+      </div>
+    )
+  }
+
+  if (id === "robot-gardener") {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.100),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.100),transparent)] dark:bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.950),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.950),transparent)]">
+        <TopNav />
+        <main className="mx-auto max-w-4xl px-4 py-10">
+          <RobotGardenerClient />
+        </main>
+      </div>
+    )
+  }
+
+  if (id === "drum-beat") {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.100),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.100),transparent)] dark:bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.950),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.950),transparent)]">
+        <TopNav />
+        <main className="mx-auto max-w-4xl px-4 py-10">
+          <DrumBeatClient />
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.100),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.100),transparent)] dark:bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.950),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.950),transparent)]">
@@ -43,4 +115,3 @@ export default async function PlayPage({
     </div>
   )
 }
-

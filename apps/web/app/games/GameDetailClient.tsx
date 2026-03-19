@@ -57,33 +57,37 @@ export default function GameDetailClient({ id }: { id: string }) {
         {game ? `${game.emoji} ${game.title}` : `Game: ${id}`}
       </h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-        {game?.blurb ??
+        {(game?.blurb?.replaceAll("星空币", "积分") as string | undefined) ??
           "你可以直接玩，也可以选择“我自己来”写一点代码，通过校验后继续玩。"}
       </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Link
           href={`/play/${id}?mode=direct`}
-          className="group rounded-3xl border border-black/5 bg-white/60 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/5"
+          className="group flex min-h-44 flex-col justify-between rounded-3xl border border-black/5 bg-white/60 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/5"
         >
-          <div className="text-sm font-extrabold">直接玩</div>
-          <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
-            立刻开始游戏，边玩边学。
+          <div>
+            <div className="text-sm font-extrabold">直接玩</div>
+            <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              立刻开始游戏，边玩边学。
+            </div>
           </div>
-          <div className="mt-3 inline-flex h-10 items-center justify-center rounded-2xl bg-zinc-950 px-4 text-sm font-extrabold text-white group-hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:group-hover:bg-zinc-200">
+          <div className="mt-4 inline-flex h-10 items-center justify-center rounded-2xl bg-zinc-950 px-4 text-sm font-extrabold text-white group-hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:group-hover:bg-zinc-200 whitespace-nowrap">
             现在就玩
           </div>
         </Link>
 
         <Link
           href={`/play/${id}/code`}
-          className="group rounded-3xl border border-black/5 bg-gradient-to-b from-white/70 to-white/40 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:from-white/10 dark:to-white/5"
+          className="group flex min-h-44 flex-col justify-between rounded-3xl border border-black/5 bg-gradient-to-b from-white/70 to-white/40 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:from-white/10 dark:to-white/5"
         >
-          <div className="text-sm font-extrabold">我自己来</div>
-          <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
-            写一点点代码，让老师或系统校验，通过后继续玩。
+          <div>
+            <div className="text-sm font-extrabold">我自己来</div>
+            <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              写一点点代码，让老师或系统校验，通过后继续玩。
+            </div>
           </div>
-          <div className="mt-3 inline-flex h-10 items-center justify-center rounded-2xl border border-black/10 bg-white/60 px-4 text-sm font-extrabold text-zinc-900 group-hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:group-hover:bg-white/10">
+          <div className="mt-4 inline-flex h-10 items-center justify-center rounded-2xl border border-black/10 bg-white/60 px-4 text-sm font-extrabold text-zinc-900 group-hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:group-hover:bg-white/10 whitespace-nowrap">
             去写代码
           </div>
         </Link>

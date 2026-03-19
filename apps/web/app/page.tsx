@@ -1,6 +1,8 @@
 import TopNav from "@/app/components/TopNav"
 import Link from "next/link"
 import FeaturedMiniGames from "@/app/components/FeaturedMiniGames"
+import HomeDashboardCards from "@/app/components/HomeDashboardCards"
+import HomeLeaderboards from "@/app/components/HomeLeaderboards"
 
 export default function Home() {
   return (
@@ -16,39 +18,11 @@ export default function Home() {
               选一个小游戏，马上开玩
             </h1>
             <p className="mt-3 text-base leading-7 text-zinc-700 dark:text-zinc-200">
-              每天进步一点点。完成关卡可以获得星空币，解锁更多挑战。
+              每天进步一点点。完成关卡可以获得积分，积分可由老师统一兑换星空币（100 分=1 星空币）。
             </p>
           </div>
 
-          <div className="relative mt-6 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-3xl border border-black/5 bg-white/60 p-4 text-sm dark:border-white/10 dark:bg-white/5">
-              <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                今日任务
-              </div>
-              <div className="mt-1 font-extrabold">完成 1 个小游戏</div>
-              <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                任务系统之后接入
-              </div>
-            </div>
-            <div className="rounded-3xl border border-black/5 bg-white/60 p-4 text-sm dark:border-white/10 dark:bg-white/5">
-              <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                奖励
-              </div>
-              <div className="mt-1 font-extrabold">星空币 +10</div>
-              <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                积分规则之后可调
-              </div>
-            </div>
-            <div className="rounded-3xl border border-black/5 bg-white/60 p-4 text-sm dark:border-white/10 dark:bg-white/5">
-              <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                班级榜 (可选)
-              </div>
-              <div className="mt-1 font-extrabold">和同学一起冲</div>
-              <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                下一步扩展数据库
-              </div>
-            </div>
-          </div>
+          <HomeDashboardCards />
         </section>
 
         <section className="mt-8">
@@ -70,6 +44,7 @@ export default function Home() {
           </div>
 
           <FeaturedMiniGames limit={6} />
+          <HomeLeaderboards />
         </section>
 
         <footer className="mt-12 grid gap-4 rounded-[2rem] border border-black/5 bg-white/60 p-6 text-sm text-zinc-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-950/40 dark:text-zinc-300 sm:grid-cols-3">
@@ -78,9 +53,7 @@ export default function Home() {
               联系方式
             </div>
             <div className="mt-2 text-xs">
-              support@kidscode.example (占位)
-              <br />
-              课程与入群: 由老师统一通知
+              loujiachen6@gmail.com
             </div>
           </div>
           <div>
@@ -95,8 +68,13 @@ export default function Home() {
             <div className="font-extrabold text-zinc-900 dark:text-white">
               安全与隐私
             </div>
-            <div className="mt-2 text-xs">
-              不在首页暴露管理入口。管理仅通过路径访问。
+            <div className="mt-3 text-xs">
+              <Link
+                href="/admin"
+                className="font-semibold text-zinc-700 underline-offset-2 hover:underline dark:text-zinc-200"
+              >
+                管理员入口
+              </Link>
             </div>
           </div>
         </footer>

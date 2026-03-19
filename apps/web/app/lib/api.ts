@@ -1,5 +1,4 @@
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001"
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api"
 
 type ApiError = {
   error?: string
@@ -14,7 +13,9 @@ export async function apiFetch<T>(
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers ?? {})
-    }
+    },
+    // Ensure cookies flow when API is same-origin (/api) and support explicit includes.
+    credentials: init?.credentials ?? "same-origin"
   })
 
   if (!res.ok) {
@@ -30,4 +31,3 @@ export async function apiFetch<T>(
 
   return (await res.json()) as T
 }
-

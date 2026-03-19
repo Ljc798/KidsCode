@@ -1,9 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { apiFetch } from "@/app/lib/api"
 import GameCard, { type GameCardData } from "@/app/components/GameCard"
-import { getConcept } from "@/app/lib/progress"
 import type { Concept } from "@/app/lib/games"
 
 type MiniGame = {
@@ -14,8 +13,16 @@ type MiniGame = {
   requires: Concept
 }
 
+type MeResponse =
+  | { ok: true; student: { concept?: Concept | null } }
+  | { ok: false }
+
+function conceptRank(requires: Concept) {
+  return requires === "BRANCH" ? 0 : 1
+}
+
 export default function FeaturedMiniGames({ limit = 6 }: { limit?: number }) {
-  const concept = useMemo(() => getConcept(), [])
+  const [concept, setConcept] = useState<Concept>("BRANCH")
   const [games, setGames] = useState<MiniGame[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -24,7 +31,11 @@ export default function FeaturedMiniGames({ limit = 6 }: { limit?: number }) {
       setLoading(true)
       try {
         const data = await apiFetch<MiniGame[]>("/minigames")
-        setGames(data.slice(0, limit))
+        const sorted = [...data].sort((a, b) => {
+          const d = conceptRank(a.requires) - conceptRank(b.requires)
+          return d !== 0 ? d : a.slug.localeCompare(b.slug, "zh-Hans-CN")
+        })
+        setGames(sorted.slice(0, limit))
       } catch {
         setGames([])
       } finally {
@@ -33,6 +44,21 @@ export default function FeaturedMiniGames({ limit = 6 }: { limit?: number }) {
     }
     run()
   }, [limit])
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const me = await apiFetch<MeResponse>("/auth/student/me")
+        if (me.ok) {
+          const c = me.student.concept
+          if (c === "BRANCH" || c === "LOOP") setConcept(c)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    run()
+  }, [])
 
   if (loading) {
     return (
@@ -55,7 +81,7 @@ export default function FeaturedMiniGames({ limit = 6 }: { limit?: number }) {
           id: g.slug,
           title: g.title,
           emoji: g.emoji,
-          blurb: g.blurb,
+          blurb: g.blurb.replaceAll("星空币", "积分"),
           locked,
           requiresLabel: g.requires === "LOOP" ? "循环" : "分支"
         }
@@ -64,4 +90,3 @@ export default function FeaturedMiniGames({ limit = 6 }: { limit?: number }) {
     </div>
   )
 }
-

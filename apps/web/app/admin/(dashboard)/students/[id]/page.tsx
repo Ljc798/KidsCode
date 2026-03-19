@@ -7,9 +7,11 @@ import { apiFetch } from "@/app/lib/api"
 
 type Student = {
   id: string
-  phone: string
+  account: string
   nickname: string
   age: number
+  className: string | null
+  concept: "BRANCH" | "LOOP"
   createdAt: string
 }
 
@@ -18,9 +20,12 @@ export default function EditStudentPage() {
   const params = useParams()
   const id = Array.isArray(params.id) ? params.id[0] : params.id
 
-  const [phone, setPhone] = useState("")
+  const [account, setAccount] = useState("")
+  const [originalAccount, setOriginalAccount] = useState("")
   const [nickname, setNickname] = useState("")
   const [age, setAge] = useState("")
+  const [className, setClassName] = useState("")
+  const [concept, setConcept] = useState<"BRANCH" | "LOOP">("BRANCH")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -35,9 +40,12 @@ export default function EditStudentPage() {
       setLoading(true)
       try {
         const data = await apiFetch<Student>(`/students/${id}`)
-        setPhone(data.phone)
+        setAccount(data.account)
+        setOriginalAccount(data.account)
         setNickname(data.nickname)
         setAge(String(data.age))
+        setClassName(data.className ?? "")
+        setConcept(data.concept === "LOOP" ? "LOOP" : "BRANCH")
       } catch (e: unknown) {
         setError(messageFromError(e))
       } finally {
@@ -52,14 +60,17 @@ export default function EditStudentPage() {
     setError(null)
     setSaving(true)
     try {
+      const body: Record<string, unknown> = {
+        nickname,
+        age: Number(age),
+        className: className.trim() ? className : null,
+        concept
+      }
+      if (account.trim() !== originalAccount.trim()) body.account = account
+      if (password.trim()) body.password = password
       await apiFetch(`/students/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          phone,
-          nickname,
-          age: Number(age),
-          ...(password.trim() ? { password } : {})
-        })
+        body: JSON.stringify(body)
       })
       router.push("/admin/students")
       router.refresh()
@@ -101,13 +112,14 @@ export default function EditStudentPage() {
         <form onSubmit={handleSubmit} className="mt-6 grid gap-4 sm:max-w-xl">
           <label className="grid gap-1 text-sm">
             <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-              Phone
+              账号（字母/数字/_/-）
             </span>
             <input
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              type="tel"
-              inputMode="numeric"
+              value={account}
+              onChange={e => setAccount(e.target.value)}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               className="h-10 rounded-xl border border-black/10 bg-white/70 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/40"
               required
             />
@@ -141,6 +153,32 @@ export default function EditStudentPage() {
               />
             </label>
           </div>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+              Class
+            </span>
+            <input
+              value={className}
+              onChange={e => setClassName(e.target.value)}
+              placeholder="e.g. M1 / M2 / A1 / E1"
+              className="h-10 rounded-xl border border-black/10 bg-white/70 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/40"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+              学习进度（解锁）
+            </span>
+            <select
+              value={concept}
+              onChange={e => setConcept(e.target.value === "LOOP" ? "LOOP" : "BRANCH")}
+              className="h-10 rounded-xl border border-black/10 bg-white/70 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/40"
+            >
+              <option value="BRANCH">分支（if / else）</option>
+              <option value="LOOP">循环（for / while）</option>
+            </select>
+          </label>
 
           <label className="grid gap-1 text-sm">
             <span className="font-semibold text-zinc-800 dark:text-zinc-200">

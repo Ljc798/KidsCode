@@ -71,10 +71,7 @@ export default function CppKnowledgeList() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="rounded-2xl border border-black/10 bg-white/60 px-3 py-1 text-xs font-extrabold text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
-                    第 {Math.max(1, Math.round(it.order / 10))} 课
-                  </div>
-                  <div className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
                     更新: {formatShanghaiDateTime(it.updatedAt)}
                   </div>
                 </div>
@@ -86,4 +83,3 @@ export default function CppKnowledgeList() {
     </section>
   )
 }
-

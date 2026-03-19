@@ -3,6 +3,12 @@ import cors from "cors"
 import studentRoutes from "./routes/student.routes"
 import minigameRoutes from "./routes/minigame.routes"
 import knowledgeRoutes from "./routes/knowledge.routes"
+import adminAuthRoutes from "./routes/adminAuth.routes"
+import studentAuthRoutes from "./routes/studentAuth.routes"
+import leaderboardRoutes from "./routes/leaderboard.routes"
+import exerciseRoutes from "./routes/exercise.routes"
+import adminExerciseRoutes from "./routes/adminExercise.routes"
+import adminExerciseReviewRoutes from "./routes/adminExerciseReview.routes"
 
 const app = express()
 
@@ -13,6 +19,12 @@ app.use(express.json())
 app.use("/students", studentRoutes)
 app.use("/minigames", minigameRoutes)
 app.use("/knowledge", knowledgeRoutes)
+app.use("/auth/admin", adminAuthRoutes)
+app.use("/auth/student", studentAuthRoutes)
+app.use("/leaderboard", leaderboardRoutes)
+app.use("/exercises", exerciseRoutes)
+app.use("/admin/exercises", adminExerciseRoutes)
+app.use("/admin/exercise-reviews", adminExerciseReviewRoutes)
 
 app.listen(3001, () => {
   console.log("API running on http://localhost:3001")

@@ -1,5 +1,4 @@
 import TopNav from "@/app/components/TopNav"
-import Link from "next/link"
 import GamesGrid from "@/app/games/GamesGrid"
 
 export default function GamesPage() {
@@ -17,16 +16,13 @@ export default function GamesPage() {
         <div className="mt-4 rounded-3xl border border-black/5 bg-white/60 p-4 text-sm shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-950/40">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-zinc-700 dark:text-zinc-200">
-              游戏会根据你的学习进度解锁: 先学{" "}
+              游戏会根据老师设置的学习进度解锁：先学{" "}
               <span className="font-extrabold">分支</span>，再学{" "}
               <span className="font-extrabold">循环</span>。
             </div>
-            <Link
-              href="/me"
-              className="inline-flex h-10 items-center justify-center rounded-2xl border border-black/10 bg-white/60 px-4 text-sm font-extrabold text-zinc-900 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-            >
-              去设置我的进度
-            </Link>
+            <div className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+              需要解锁请联系老师
+            </div>
           </div>
         </div>
 
