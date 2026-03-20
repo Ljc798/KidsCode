@@ -15,6 +15,7 @@ export default function TopNav({
     return (
       <Link
         href={href}
+        prefetch={false}
         className={[
           "rounded-2xl px-3 py-2 text-sm font-semibold transition",
           isActive

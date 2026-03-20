@@ -36,11 +36,11 @@ export default function StudentLoginClient() {
       }
 
       if (data.isAdmin && next === "/") {
-        router.replace("/admin")
+        window.location.replace("/admin")
         return
       }
 
-      router.replace(next)
+      window.location.replace(next)
     } catch (e2: unknown) {
       setError(e2 instanceof Error ? e2.message : "账号或密码错误")
     } finally {

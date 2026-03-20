@@ -17,43 +17,16 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    // Verify via API to avoid env/config mismatch between web and api (e.g. ADMIN_JWT_SECRET).
-    const meUrl = new URL("/api/auth/admin/me", req.url)
-    const meRes = await fetch(meUrl, {
-      headers: { cookie: `kidscode_admin=${token}` },
-      cache: "no-store"
-    })
-    if (!meRes.ok) {
-      const url = req.nextUrl.clone()
-      url.pathname = "/login"
-      url.searchParams.set("next", `${pathname}${search}`)
-      return NextResponse.redirect(url)
-    }
-
     return NextResponse.next()
   }
 
   // Student protection for gameplay and code submission
   if (pathname.startsWith("/pet")) {
     const studentToken = req.cookies.get("kidscode_student")?.value
-    if (studentToken) {
-      const meUrl = new URL("/api/auth/student/me", req.url)
-      const meRes = await fetch(meUrl, {
-        headers: { cookie: `kidscode_student=${studentToken}` },
-        cache: "no-store"
-      })
-      if (meRes.ok) return NextResponse.next()
-    }
+    if (studentToken) return NextResponse.next()
 
     const adminToken = req.cookies.get("kidscode_admin")?.value
-    if (adminToken) {
-      const meUrl = new URL("/api/auth/admin/me", req.url)
-      const meRes = await fetch(meUrl, {
-        headers: { cookie: `kidscode_admin=${adminToken}` },
-        cache: "no-store"
-      })
-      if (meRes.ok) return NextResponse.next()
-    }
+    if (adminToken) return NextResponse.next()
 
     const url = req.nextUrl.clone()
     url.pathname = "/login"
@@ -64,17 +37,6 @@ export async function middleware(req: NextRequest) {
   if (pathname.startsWith("/play") || pathname.startsWith("/exercises")) {
     const token = req.cookies.get("kidscode_student")?.value
     if (!token) {
-      const url = req.nextUrl.clone()
-      url.pathname = "/login"
-      url.searchParams.set("next", `${pathname}${search}`)
-      return NextResponse.redirect(url)
-    }
-    const meUrl = new URL("/api/auth/student/me", req.url)
-    const meRes = await fetch(meUrl, {
-      headers: { cookie: `kidscode_student=${token}` },
-      cache: "no-store"
-    })
-    if (!meRes.ok) {
       const url = req.nextUrl.clone()
       url.pathname = "/login"
       url.searchParams.set("next", `${pathname}${search}`)

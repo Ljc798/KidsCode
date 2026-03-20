@@ -177,7 +177,7 @@ export default function StudentStatusCard() {
                   </div>
                 </div>
               </div>
-              <Link href="/pet" className="mt-4 inline-flex text-sm font-semibold text-zinc-800 hover:underline dark:text-zinc-200">
+              <Link href="/pet" prefetch={false} className="mt-4 inline-flex text-sm font-semibold text-zinc-800 hover:underline dark:text-zinc-200">
                 查看宠物详情
               </Link>
             </div>
