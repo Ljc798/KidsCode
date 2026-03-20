@@ -21,6 +21,15 @@ const CONTENT_LIMITS = {
 } as const
 
 type ProjectKind = keyof typeof CONTENT_LIMITS
+type ProjectCategory = "CLASSROOM" | "PERSONAL"
+
+function formatMonthDay(value: Date) {
+  return `${value.getMonth() + 1}-${value.getDate()}`
+}
+
+function categoryLabel(category: ProjectCategory) {
+  return category === "CLASSROOM" ? "课堂创作" : "自我创作"
+}
 
 function decodeDataUrl(input: string) {
   const match = input.match(/^data:([^;,]+)?;base64,(.+)$/)
@@ -42,8 +51,12 @@ router.get("/mine", async (req: any, res) => {
     select: {
       id: true,
       kind: true,
+      category: true,
       title: true,
       uploaderName: true,
+      weekNumber: true,
+      ideaNote: true,
+      commonMistakes: true,
       size: true,
       fileName: true,
       mimeType: true,
@@ -51,6 +64,9 @@ router.get("/mine", async (req: any, res) => {
       bucket: true,
       objectKey: true,
       storageProvider: true,
+      reviewStatus: true,
+      teacherComment: true,
+      reviewedAt: true,
       createdAt: true,
       updatedAt: true
     }
@@ -61,8 +77,12 @@ router.get("/mine", async (req: any, res) => {
     projects: projects.map(project => ({
       id: project.id,
       kind: project.kind,
+      category: project.category,
       title: project.title,
       uploaderName: project.uploaderName,
+      weekNumber: project.weekNumber,
+      ideaNote: project.ideaNote,
+      commonMistakes: project.commonMistakes,
       fileName: project.fileName,
       mimeType: project.mimeType,
       preview:
@@ -72,6 +92,13 @@ router.get("/mine", async (req: any, res) => {
             ? "Scratch 项目已上传到对象存储，可继续管理或后续接入编辑器。"
             : "文件已上传到对象存储，后续可继续补充预览或解析逻辑。",
       size: project.size ?? (project.kind === "CPP" ? (project.content ?? "").length : 0),
+      reviewStatus: project.reviewStatus,
+      teacherComment: project.teacherComment,
+      reviewedAt: project.reviewedAt?.toISOString() ?? null,
+      displayName:
+        project.category === "CLASSROOM" && project.weekNumber
+          ? `${formatMonthDay(project.createdAt)} 第${project.weekNumber}周`
+          : `${formatMonthDay(project.createdAt)} ${categoryLabel(project.category as ProjectCategory)}`,
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
       canDownload: project.kind === "SCRATCH" && !!project.objectKey,
@@ -95,14 +122,21 @@ router.get("/:id", async (req: any, res) => {
     select: {
       id: true,
       kind: true,
+      category: true,
       title: true,
       uploaderName: true,
+      weekNumber: true,
+      ideaNote: true,
+      commonMistakes: true,
       fileName: true,
       mimeType: true,
       content: true,
       size: true,
       bucket: true,
       objectKey: true,
+      reviewStatus: true,
+      teacherComment: true,
+      reviewedAt: true,
       createdAt: true,
       updatedAt: true
     }
@@ -115,8 +149,12 @@ router.get("/:id", async (req: any, res) => {
     project: {
       id: project.id,
       kind: project.kind,
+      category: project.category,
       title: project.title,
       uploaderName: project.uploaderName,
+      weekNumber: project.weekNumber,
+      ideaNote: project.ideaNote,
+      commonMistakes: project.commonMistakes,
       fileName: project.fileName,
       mimeType: project.mimeType,
       content:
@@ -126,6 +164,13 @@ router.get("/:id", async (req: any, res) => {
             ? "Scratch 项目已上传到对象存储，可通过下载按钮获取原文件。"
             : "文件已上传到对象存储，当前暂未提供在线预览。",
       size: project.size ?? (project.kind === "CPP" ? (project.content ?? "").length : 0),
+      reviewStatus: project.reviewStatus,
+      teacherComment: project.teacherComment,
+      reviewedAt: project.reviewedAt?.toISOString() ?? null,
+      displayName:
+        project.category === "CLASSROOM" && project.weekNumber
+          ? `${formatMonthDay(project.createdAt)} 第${project.weekNumber}周`
+          : `${formatMonthDay(project.createdAt)} ${categoryLabel(project.category as ProjectCategory)}`,
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
       canDownload: project.kind === "SCRATCH" && !!project.objectKey
@@ -167,6 +212,20 @@ router.post("/", async (req: any, res) => {
     select: { nickname: true }
   })
   const title = asString(req.body?.title)
+  const category: ProjectCategory | null =
+    req.body?.category === "CLASSROOM" || req.body?.category === "PERSONAL"
+      ? req.body.category
+      : null
+  const weekNumberRaw = req.body?.weekNumber
+  const weekNumber =
+    typeof weekNumberRaw === "number" && Number.isInteger(weekNumberRaw)
+      ? weekNumberRaw
+      : typeof weekNumberRaw === "string" && weekNumberRaw.trim()
+        ? Number(weekNumberRaw)
+        : null
+  const ideaNote = req.body?.ideaNote === undefined ? null : asString(req.body.ideaNote)
+  const commonMistakes =
+    req.body?.commonMistakes === undefined ? null : asString(req.body.commonMistakes)
   const uploaderName = student?.nickname?.trim() ?? ""
   const kind: ProjectKind | null =
     req.body?.kind === "CPP" || req.body?.kind === "SCRATCH" || req.body?.kind === "OTHER"
@@ -180,8 +239,15 @@ router.post("/", async (req: any, res) => {
 
   if (!title) return res.status(400).json({ error: "title is required" })
   if (!uploaderName) return res.status(400).json({ error: "uploaderName is required" })
+  if (!category) return res.status(400).json({ error: "category is required" })
   if (!kind) {
     return res.status(400).json({ error: "kind must be CPP, SCRATCH or OTHER" })
+  }
+  if (category === "CLASSROOM" && (!Number.isInteger(weekNumber) || weekNumber! <= 0)) {
+    return res.status(400).json({ error: "weekNumber is required for classroom projects" })
+  }
+  if (category === "PERSONAL" && weekNumber !== null) {
+    return res.status(400).json({ error: "weekNumber is only allowed for classroom projects" })
   }
   if (!content) return res.status(400).json({ error: "content is required" })
   if (content.length > CONTENT_LIMITS[kind]) {
@@ -197,31 +263,48 @@ router.post("/", async (req: any, res) => {
           data: {
             studentId,
             kind,
+            category,
             title,
             uploaderName,
+            weekNumber: category === "CLASSROOM" ? weekNumber : null,
+            ideaNote,
+            commonMistakes: category === "CLASSROOM" ? commonMistakes : null,
             content,
             fileName,
             mimeType,
-            size: content.length
+            size: content.length,
+            reviewStatus: category === "CLASSROOM" ? "PENDING" : "NONE"
           },
           select: {
             id: true,
             kind: true,
+            category: true,
             title: true,
             uploaderName: true,
+            weekNumber: true,
+            ideaNote: true,
+            commonMistakes: true,
             fileName: true,
             mimeType: true,
             size: true,
             bucket: true,
             objectKey: true,
             storageProvider: true,
+            reviewStatus: true,
+            teacherComment: true,
+            reviewedAt: true,
             createdAt: true,
             updatedAt: true
           }
         })
       : await (async () => {
           const decoded = decodeDataUrl(content)
-          const objectKey = createScratchObjectKey(uploaderName, title, fileName)
+          const objectKey = createScratchObjectKey(
+            uploaderName,
+            category,
+            title,
+            fileName
+          )
           const uploaded = await uploadObject({
             key: objectKey,
             body: decoded.buffer,
@@ -232,27 +315,39 @@ router.post("/", async (req: any, res) => {
             data: {
               studentId,
               kind,
+              category,
               title,
               uploaderName,
+              weekNumber: category === "CLASSROOM" ? weekNumber : null,
+              ideaNote,
+              commonMistakes: category === "CLASSROOM" ? commonMistakes : null,
               content: null,
               fileName,
               mimeType: mimeType || decoded.mimeType,
               size: uploaded.size,
               bucket: uploaded.bucket,
               objectKey: uploaded.key,
-              storageProvider: uploaded.provider
+              storageProvider: uploaded.provider,
+              reviewStatus: category === "CLASSROOM" ? "PENDING" : "NONE"
             },
             select: {
               id: true,
               kind: true,
+              category: true,
               title: true,
               uploaderName: true,
+              weekNumber: true,
+              ideaNote: true,
+              commonMistakes: true,
               fileName: true,
               mimeType: true,
               size: true,
               bucket: true,
               objectKey: true,
               storageProvider: true,
+              reviewStatus: true,
+              teacherComment: true,
+              reviewedAt: true,
               createdAt: true,
               updatedAt: true
             }
@@ -265,6 +360,191 @@ router.post("/", async (req: any, res) => {
       ...created,
       createdAt: created.createdAt.toISOString(),
       updatedAt: created.updatedAt.toISOString()
+    }
+  })
+})
+
+router.patch("/:id", async (req: any, res) => {
+  const studentId = req.studentId as string
+  const id = asString(req.params.id)
+  if (!id) return res.status(400).json({ error: "invalid id" })
+
+  const existing = await prisma.studentProject.findFirst({
+    where: {
+      id,
+      studentId
+    },
+    select: {
+      id: true,
+      category: true,
+      kind: true,
+      objectKey: true
+    }
+  })
+  if (!existing) return res.status(404).json({ error: "project not found" })
+
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { nickname: true }
+  })
+  const uploaderName = student?.nickname?.trim() ?? ""
+  const title = asString(req.body?.title)
+  const category: ProjectCategory | null =
+    req.body?.category === "CLASSROOM" || req.body?.category === "PERSONAL"
+      ? req.body.category
+      : null
+  const weekNumberRaw = req.body?.weekNumber
+  const weekNumber =
+    typeof weekNumberRaw === "number" && Number.isInteger(weekNumberRaw)
+      ? weekNumberRaw
+      : typeof weekNumberRaw === "string" && weekNumberRaw.trim()
+        ? Number(weekNumberRaw)
+        : null
+  const ideaNote = req.body?.ideaNote === undefined ? null : asString(req.body.ideaNote)
+  const commonMistakes =
+    req.body?.commonMistakes === undefined ? null : asString(req.body.commonMistakes)
+  const content = typeof req.body?.content === "string" ? req.body.content : ""
+  const fileNameRaw = req.body?.fileName
+  const mimeTypeRaw = req.body?.mimeType
+  const fileName = fileNameRaw === undefined ? null : asString(fileNameRaw)
+  const mimeType = mimeTypeRaw === undefined ? null : asString(mimeTypeRaw)
+
+  if (!title) return res.status(400).json({ error: "title is required" })
+  if (!uploaderName) return res.status(400).json({ error: "uploaderName is required" })
+  if (!category) return res.status(400).json({ error: "category is required" })
+  if (existing.kind === "SCRATCH" && !fileName) {
+    return res.status(400).json({ error: "fileName is required for scratch" })
+  }
+  if (category === "CLASSROOM" && (!Number.isInteger(weekNumber) || weekNumber! <= 0)) {
+    return res.status(400).json({ error: "weekNumber is required for classroom projects" })
+  }
+  if (category === "PERSONAL" && weekNumber !== null) {
+    return res.status(400).json({ error: "weekNumber is only allowed for classroom projects" })
+  }
+  if (existing.kind === "CPP" && !content.trim()) {
+    return res.status(400).json({ error: "content is required" })
+  }
+
+  const reviewReset =
+    category === "CLASSROOM"
+      ? {
+          reviewStatus: "PENDING" as const,
+          teacherComment: null,
+          reviewedAt: null
+        }
+      : {
+          reviewStatus: "NONE" as const,
+          teacherComment: null,
+          reviewedAt: null
+        }
+
+  const updated =
+    existing.kind === "CPP"
+      ? await prisma.studentProject.update({
+          where: { id },
+          data: {
+            category,
+            title,
+            weekNumber: category === "CLASSROOM" ? weekNumber : null,
+            ideaNote,
+            commonMistakes: category === "CLASSROOM" ? commonMistakes : null,
+            fileName,
+            mimeType,
+            content,
+            size: content.length,
+            ...reviewReset
+          },
+          select: {
+            id: true,
+            kind: true,
+            category: true,
+            title: true,
+            uploaderName: true,
+            weekNumber: true,
+            ideaNote: true,
+            commonMistakes: true,
+            fileName: true,
+            mimeType: true,
+            content: true,
+            size: true,
+            objectKey: true,
+            reviewStatus: true,
+            teacherComment: true,
+            reviewedAt: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        })
+      : await (async () => {
+          let nextObjectKey = existing.objectKey
+          let nextSize: number | null = null
+          let nextMimeType = mimeType || null
+
+          if (content) {
+            const decoded = decodeDataUrl(content)
+            nextObjectKey = createScratchObjectKey(uploaderName, category, title, fileName)
+            const uploaded = await uploadObject({
+              key: nextObjectKey,
+              body: decoded.buffer,
+              contentType: mimeType || decoded.mimeType
+            })
+            nextSize = uploaded.size
+            nextMimeType = mimeType || decoded.mimeType
+          }
+
+          return prisma.studentProject.update({
+            where: { id },
+            data: {
+              category,
+              title,
+              weekNumber: category === "CLASSROOM" ? weekNumber : null,
+              ideaNote,
+              commonMistakes: category === "CLASSROOM" ? commonMistakes : null,
+              fileName,
+              mimeType: nextMimeType,
+              ...(nextObjectKey ? { objectKey: nextObjectKey } : {}),
+              ...(nextSize === null ? {} : { size: nextSize }),
+              ...reviewReset
+            },
+            select: {
+              id: true,
+              kind: true,
+              category: true,
+              title: true,
+              uploaderName: true,
+              weekNumber: true,
+              ideaNote: true,
+              commonMistakes: true,
+              fileName: true,
+              mimeType: true,
+              content: true,
+              size: true,
+              objectKey: true,
+              reviewStatus: true,
+              teacherComment: true,
+              reviewedAt: true,
+              createdAt: true,
+              updatedAt: true
+            }
+          })
+        })()
+
+  res.json({
+    ok: true,
+    project: {
+      ...updated,
+      content:
+        updated.kind === "CPP"
+          ? updated.content ?? ""
+          : "Scratch 项目已上传到对象存储，可通过下载按钮获取原文件。",
+      displayName:
+        updated.category === "CLASSROOM" && updated.weekNumber
+          ? `${formatMonthDay(updated.createdAt)} 第${updated.weekNumber}周`
+          : `${formatMonthDay(updated.createdAt)} ${categoryLabel(updated.category as ProjectCategory)}`,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+      reviewedAt: updated.reviewedAt?.toISOString() ?? null,
+      canDownload: updated.kind === "SCRATCH" && !!updated.objectKey
     }
   })
 })

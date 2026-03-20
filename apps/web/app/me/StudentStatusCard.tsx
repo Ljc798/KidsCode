@@ -16,9 +16,7 @@ type MeResponse =
         age: number
         account: string
         className?: string | null
-        concept?: "BRANCH" | "LOOP"
         pointsBalance?: number
-        starCoinsBalance?: number
         earnedToday?: number
         dailyCap?: number
         pet: {
@@ -135,9 +133,6 @@ export default function StudentStatusCard() {
                 积分：<span className="font-semibold">{me.student.pointsBalance ?? 0}</span>
               </div>
               <div>
-                星空币：<span className="font-semibold">{me.student.starCoinsBalance ?? 0}</span>
-              </div>
-              <div>
                 今日已得：{" "}
                 <span className="font-semibold">
                   {me.student.earnedToday ?? 0}/{me.student.dailyCap ?? 1000}
@@ -154,9 +149,6 @@ export default function StudentStatusCard() {
               </div>
               <div>
                 宠物阶段：<span className="font-semibold">{me.student.pet.stage}</span>
-              </div>
-              <div>
-                学习解锁：<span className="font-semibold">{me.student.concept === "LOOP" ? "循环" : "分支"}</span>
               </div>
             </div>
 

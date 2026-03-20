@@ -12,6 +12,7 @@ import adminExerciseRoutes from "./routes/adminExercise.routes"
 import adminExerciseReviewRoutes from "./routes/adminExerciseReview.routes"
 import petRoutes from "./routes/pet.routes"
 import projectRoutes from "./routes/project.routes"
+import adminProjectReviewRoutes from "./routes/adminProjectReview.routes"
 
 const app = express()
 
@@ -30,6 +31,7 @@ app.use("/exercises", exerciseRoutes)
 app.use("/admin/exercises", adminExerciseRoutes)
 app.use("/admin/exercise-reviews", adminExerciseReviewRoutes)
 app.use("/projects", projectRoutes)
+app.use("/admin/project-reviews", adminProjectReviewRoutes)
 
 app.listen(3001, () => {
   console.log("API running on http://localhost:3001")

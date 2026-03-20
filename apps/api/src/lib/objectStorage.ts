@@ -67,13 +67,16 @@ function ensureExtension(targetFileName: string, sourceFileName: string) {
 
 export function createScratchObjectKey(
   ownerName: string,
+  category: "CLASSROOM" | "PERSONAL",
   fileName: string,
   sourceFileName?: string | null
 ) {
   const safeOwnerName = cleanPathSegment(ownerName, randomUUID())
   const normalizedFileName = ensureExtension(fileName, sourceFileName ?? fileName)
   const safeFileName = cleanPathSegment(normalizedFileName, "project.sb3")
-  return `${safeOwnerName}/scratch/${safeFileName}`
+  const categorySegment =
+    category === "CLASSROOM" ? "scratch课堂创作" : "scratch自我创作"
+  return `${safeOwnerName}/${categorySegment}/${safeFileName}`
 }
 
 export async function uploadObject(params: UploadParams) {

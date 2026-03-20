@@ -230,12 +230,27 @@ enum StudentProjectKind {
   CPP
 }
 
+enum StudentProjectCategory {
+  PERSONAL
+  CLASSROOM
+}
+
+enum StudentProjectReviewStatus {
+  NONE
+  PENDING
+  REVIEWED
+}
+
 model StudentProject {
   id        String             @id @default(uuid())
   studentId String
   kind      StudentProjectKind
+  category  StudentProjectCategory @default(PERSONAL)
   title     String
   uploaderName String?
+  weekNumber Int?
+  ideaNote  String?
+  commonMistakes String?
   content   String?
   fileName  String?
   mimeType  String?
@@ -243,6 +258,9 @@ model StudentProject {
   bucket    String?
   objectKey String?
   storageProvider String?
+  reviewStatus StudentProjectReviewStatus @default(NONE)
+  teacherComment String?
+  reviewedAt DateTime? @db.Timestamptz(3)
   createdAt DateTime           @default(now()) @db.Timestamptz(3)
   updatedAt DateTime           @updatedAt @db.Timestamptz(3)
 
