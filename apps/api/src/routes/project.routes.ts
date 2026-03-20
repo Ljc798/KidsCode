@@ -81,6 +81,58 @@ router.get("/mine", async (req: any, res) => {
   })
 })
 
+router.get("/:id", async (req: any, res) => {
+  const studentId = req.studentId as string
+  const id = asString(req.params.id)
+
+  if (!id) return res.status(400).json({ error: "invalid id" })
+
+  const project = await prisma.studentProject.findFirst({
+    where: {
+      id,
+      studentId
+    },
+    select: {
+      id: true,
+      kind: true,
+      title: true,
+      uploaderName: true,
+      fileName: true,
+      mimeType: true,
+      content: true,
+      size: true,
+      bucket: true,
+      objectKey: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  })
+
+  if (!project) return res.status(404).json({ error: "project not found" })
+
+  return res.json({
+    ok: true,
+    project: {
+      id: project.id,
+      kind: project.kind,
+      title: project.title,
+      uploaderName: project.uploaderName,
+      fileName: project.fileName,
+      mimeType: project.mimeType,
+      content:
+        project.kind === "CPP"
+          ? project.content ?? ""
+          : project.kind === "SCRATCH"
+            ? "Scratch 项目已上传到对象存储，可通过下载按钮获取原文件。"
+            : "文件已上传到对象存储，当前暂未提供在线预览。",
+      size: project.size ?? (project.kind === "CPP" ? (project.content ?? "").length : 0),
+      createdAt: project.createdAt.toISOString(),
+      updatedAt: project.updatedAt.toISOString(),
+      canDownload: project.kind === "SCRATCH" && !!project.objectKey
+    }
+  })
+})
+
 router.get("/:id/download-url", async (req: any, res) => {
   const studentId = req.studentId as string
   const id = asString(req.params.id)

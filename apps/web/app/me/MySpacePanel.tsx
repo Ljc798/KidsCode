@@ -21,6 +21,10 @@ type ProjectSummary = {
   updatedAt: string
 }
 
+type ProjectDetail = ProjectSummary & {
+  content: string
+}
+
 type ProjectsResponse =
   | {
       ok: true
@@ -60,9 +64,10 @@ export default function MySpacePanel() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
-  const [activeProject, setActiveProject] = useState<ProjectSummary | null>(null)
+  const [activeProject, setActiveProject] = useState<ProjectDetail | null>(null)
   const [saving, setSaving] = useState(false)
   const [downloadLoadingId, setDownloadLoadingId] = useState<string | null>(null)
+  const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null)
   const [kind, setKind] = useState<UploadKind>("SCRATCH")
   const [fileName, setFileName] = useState("")
   const [selectedLocalFileName, setSelectedLocalFileName] = useState("")
@@ -181,6 +186,27 @@ export default function MySpacePanel() {
     }
   }
 
+  const openProject = async (project: ProjectSummary) => {
+    setDetailLoadingId(project.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/projects/${project.id}`, {
+        cache: "no-store"
+      })
+      const data = (await res.json().catch(() => ({ ok: false }))) as
+        | { ok: true; project: ProjectDetail }
+        | { ok?: false; error?: string }
+      if (!res.ok || !data.ok) {
+        throw new Error(("error" in data && data.error) || "加载作品详情失败")
+      }
+      setActiveProject(data.project)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "加载作品详情失败")
+    } finally {
+      setDetailLoadingId(null)
+    }
+  }
+
   return (
     <section className="rounded-3xl border border-black/5 bg-white/60 p-5 dark:border-white/10 dark:bg-zinc-950/40">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -223,7 +249,7 @@ export default function MySpacePanel() {
               <button
                 key={project.id}
                 type="button"
-                onClick={() => setActiveProject(project)}
+                onClick={() => openProject(project)}
                 className="group flex min-h-60 flex-col rounded-[1.6rem] border border-black/8 bg-white/75 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/5"
               >
                 <div className="flex items-center justify-between gap-3">
@@ -244,6 +270,7 @@ export default function MySpacePanel() {
                 </p>
 
                 <div className="mt-auto pt-5 text-xs text-zinc-500 dark:text-zinc-400">
+                  {detailLoadingId === project.id ? <div className="truncate">正在加载完整内容...</div> : null}
                   <div className="truncate">大小：{formatSize(project.kind, project.size)}</div>
                   {project.fileName ? <div className="mt-1 truncate">文件：{project.fileName}</div> : null}
                 </div>
@@ -432,8 +459,8 @@ int main() {
             ) : null}
 
             <div className="mt-5 rounded-[1.5rem] border border-black/8 bg-zinc-50 p-4 dark:border-white/10 dark:bg-black/20">
-              <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words font-mono text-sm text-zinc-700 dark:text-zinc-200">
-                {activeProject.preview || "暂无内容"}
+              <pre className="h-[52vh] overflow-y-auto whitespace-pre-wrap break-words font-mono text-sm leading-7 text-zinc-700 dark:text-zinc-200">
+                {activeProject.content || "暂无内容"}
               </pre>
             </div>
           </div>
