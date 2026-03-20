@@ -1,0 +1,444 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import type { ChangeEvent } from "react"
+import CodeEditor from "@/app/exercises/CodeEditor"
+
+type ProjectKind = "SCRATCH" | "OTHER" | "CPP"
+type UploadKind = "SCRATCH" | "CPP"
+
+type ProjectSummary = {
+  id: string
+  kind: ProjectKind
+  title: string
+  uploaderName?: string | null
+  fileName: string | null
+  mimeType: string | null
+  preview: string
+  size: number
+  canDownload?: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+type ProjectsResponse =
+  | {
+      ok: true
+      projects: ProjectSummary[]
+    }
+  | {
+      ok?: false
+      error?: string
+    }
+
+const kindLabel: Record<ProjectKind, string> = {
+  SCRATCH: "Scratch",
+  OTHER: "其他",
+  CPP: "C++"
+}
+
+function formatDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date)
+}
+
+function formatSize(kind: ProjectKind, size: number) {
+  if (kind === "CPP") return `${size} 字`
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export default function MySpacePanel() {
+  const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [activeProject, setActiveProject] = useState<ProjectSummary | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [downloadLoadingId, setDownloadLoadingId] = useState<string | null>(null)
+  const [kind, setKind] = useState<UploadKind>("SCRATCH")
+  const [fileName, setFileName] = useState("")
+  const [selectedLocalFileName, setSelectedLocalFileName] = useState("")
+  const [fileMimeType, setFileMimeType] = useState("")
+  const [fileContent, setFileContent] = useState("")
+
+  const loadProjects = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/projects/mine", { cache: "no-store" })
+      const data = (await res.json().catch(() => ({ ok: false }))) as ProjectsResponse
+      if (!res.ok || !data.ok) {
+        throw new Error(("error" in data && data.error) || "加载作品失败")
+      }
+      setProjects(data.projects)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "加载作品失败")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadProjects()
+  }, [])
+
+  const resetEditor = () => {
+    setKind("SCRATCH")
+    setFileName("")
+    setSelectedLocalFileName("")
+    setFileMimeType("")
+    setFileContent("")
+  }
+
+  const onPickFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      setFileName("")
+      setSelectedLocalFileName("")
+      setFileMimeType("")
+      setFileContent("")
+      return
+    }
+
+    const reader = new FileReader()
+    const result = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "")
+      reader.onerror = () => reject(new Error("读取文件失败"))
+      reader.readAsDataURL(file)
+    })
+
+    setSelectedLocalFileName(file.name)
+    if (!fileName.trim()) {
+      setFileName(file.name)
+    }
+    setFileMimeType(file.type || "application/octet-stream")
+    setFileContent(result)
+  }
+
+  const submitProject = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const payload = {
+        kind,
+        title: fileName,
+        content: fileContent,
+        fileName: kind === "SCRATCH" ? selectedLocalFileName || fileName : fileName,
+        mimeType: kind === "SCRATCH" ? fileMimeType : "text/x-c++src"
+      }
+
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+      const data = (await res.json().catch(() => ({ ok: false }))) as
+        | { ok: true }
+        | { ok?: false; error?: string }
+      if (!res.ok || !data.ok) {
+        throw new Error(("error" in data && data.error) || "上传作品失败")
+      }
+      resetEditor()
+      setEditorOpen(false)
+      await loadProjects()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "上传作品失败")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onCppChange = (value: string) => {
+    setFileContent(value)
+  }
+
+  const downloadScratch = async (projectId: string) => {
+    setDownloadLoadingId(projectId)
+    setError(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/download-url`, {
+        cache: "no-store"
+      })
+      const data = (await res.json().catch(() => ({ ok: false }))) as
+        | { ok: true; url: string }
+        | { ok?: false; error?: string }
+      if (!res.ok || !data.ok) {
+        throw new Error(("error" in data && data.error) || "获取下载链接失败")
+      }
+      window.open(data.url, "_blank", "noopener,noreferrer")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "获取下载链接失败")
+    } finally {
+      setDownloadLoadingId(null)
+    }
+  }
+
+  return (
+    <section className="rounded-3xl border border-black/5 bg-white/60 p-5 dark:border-white/10 dark:bg-zinc-950/40">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="text-sm font-extrabold">我的空间</div>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+            这里保存你自己的作品。Scratch 会按“昵称 / scratch / 文件名”上传到 COS，C++ 代码会继续按文本保存。
+          </p>
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <span>Scratch：上传 `.sb3`、`.sb2`、`.sb`</span>
+            <span>C++：支持代码编辑器输入</span>
+            <span>上传时会使用当前登录账号的昵称</span>
+            <span>点击卡片可查看完整内容</span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setEditorOpen(true)}
+          className="inline-flex h-11 items-center justify-center rounded-2xl bg-zinc-950 px-5 text-sm font-extrabold text-white shadow-sm hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+        >
+          上传作品
+        </button>
+      </div>
+
+      {error ? (
+        <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-700 dark:text-red-200">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="mt-5">
+        {loading ? (
+          <div className="rounded-3xl border border-dashed border-black/10 bg-white/50 px-5 py-8 text-sm text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+            正在加载你的作品...
+          </div>
+        ) : projects.length ? (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {projects.map(project => (
+              <button
+                key={project.id}
+                type="button"
+                onClick={() => setActiveProject(project)}
+                className="group flex min-h-60 flex-col rounded-[1.6rem] border border-black/8 bg-white/75 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-white/5"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="rounded-full bg-zinc-950 px-3 py-1 text-xs font-black text-white dark:bg-white dark:text-zinc-950">
+                    {kindLabel[project.kind]}
+                  </span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {formatDate(project.updatedAt)}
+                  </span>
+                </div>
+
+                <h3 className="mt-4 truncate text-lg font-black text-zinc-950 dark:text-white">
+                  {project.title}
+                </h3>
+
+                <p className="mt-2 line-clamp-4 whitespace-pre-wrap break-words text-sm text-zinc-600 dark:text-zinc-300">
+                  {project.preview || "暂无预览内容"}
+                </p>
+
+                <div className="mt-auto pt-5 text-xs text-zinc-500 dark:text-zinc-400">
+                  <div className="truncate">大小：{formatSize(project.kind, project.size)}</div>
+                  {project.fileName ? <div className="mt-1 truncate">文件：{project.fileName}</div> : null}
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-dashed border-black/10 bg-white/50 px-5 py-8 text-sm text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+            这里还没有作品。先上传一个 Scratch 项目试试。
+          </div>
+        )}
+      </div>
+
+      {editorOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+          <div className="w-full max-w-3xl rounded-[2rem] border border-black/10 bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-zinc-950">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xl font-black text-zinc-950 dark:text-white">上传作品</div>
+                <div className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  Scratch 使用文件上传，C++ 使用代码编辑器，系统会自动使用当前登录账号昵称。
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditorOpen(false)
+                  resetEditor()
+                }}
+                className="rounded-full border border-black/10 px-4 py-2 text-sm font-semibold text-zinc-700 dark:border-white/10 dark:text-zinc-200"
+              >
+                关闭
+              </button>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setKind("SCRATCH")
+                  setFileContent("")
+                  setSelectedLocalFileName("")
+                  setFileMimeType("")
+                }}
+                className={`inline-flex h-11 items-center justify-center rounded-2xl px-5 text-sm font-extrabold ${
+                  kind === "SCRATCH"
+                    ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                    : "border border-black/10 bg-white/60 text-zinc-900 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                }`}
+              >
+                Scratch
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setKind("CPP")
+                  setSelectedLocalFileName("")
+                  setFileMimeType("text/x-c++src")
+                  setFileContent("")
+                }}
+                className={`inline-flex h-11 items-center justify-center rounded-2xl px-5 text-sm font-extrabold ${
+                  kind === "CPP"
+                    ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                    : "border border-black/10 bg-white/60 text-zinc-900 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                }`}
+              >
+                C++
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4">
+              <label className="grid gap-2 text-sm">
+                <span className="font-semibold text-zinc-800 dark:text-zinc-200">文件名</span>
+                <input
+                  value={fileName}
+                  onChange={event => setFileName(event.target.value)}
+                  placeholder={kind === "SCRATCH" ? "请输入 COS 中保存的文件名，例如 我的作品" : "请输入代码文件名，例如 hello.cpp"}
+                  className="h-11 rounded-xl border border-black/10 bg-white/70 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                />
+              </label>
+
+              {kind === "SCRATCH" ? (
+                <label className="grid gap-2 text-sm">
+                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">Scratch 文件</span>
+                  <input
+                    type="file"
+                    accept=".sb3,.sb2,.sb,application/octet-stream"
+                    onChange={onPickFile}
+                    className="rounded-xl border border-dashed border-black/15 bg-white/70 px-3 py-4 text-sm outline-none dark:border-white/10 dark:bg-zinc-950/40"
+                  />
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {selectedLocalFileName
+                      ? `已选择本地文件：${selectedLocalFileName}`
+                      : "请选择一个 Scratch 项目文件"}
+                  </span>
+                </label>
+              ) : (
+                <label className="grid gap-2 text-sm">
+                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">C++ 代码</span>
+                  <CodeEditor
+                    value={fileContent}
+                    onChange={onCppChange}
+                    placeholder={`#include <iostream>
+using namespace std;
+
+int main() {
+  cout << "Hello KidsCode";
+  return 0;
+}`}
+                    className="min-h-72 w-full rounded-2xl border border-black/10 bg-white/70 px-4 py-3 font-mono text-sm outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                  />
+                </label>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={submitProject}
+                disabled={
+                  saving ||
+                  !fileName.trim() ||
+                  (kind === "SCRATCH" ? !fileContent || !selectedLocalFileName : !fileContent.trim())
+                }
+                className="inline-flex h-11 items-center justify-center rounded-2xl bg-zinc-950 px-5 text-sm font-extrabold text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                {saving ? "保存中..." : "上传文件"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditorOpen(false)
+                  resetEditor()
+                }}
+                className="inline-flex h-11 items-center justify-center rounded-2xl border border-black/10 bg-white/60 px-4 text-sm font-extrabold text-zinc-900 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {activeProject ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+          <div className="w-full max-w-3xl rounded-[2rem] border border-black/10 bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-zinc-950">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-full bg-zinc-950 px-3 py-1 text-xs font-black text-white dark:bg-white dark:text-zinc-950">
+                    {kindLabel[activeProject.kind]}
+                  </span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {formatDate(activeProject.updatedAt)}
+                  </span>
+                </div>
+                <div className="mt-3 text-2xl font-black text-zinc-950 dark:text-white">
+                  {activeProject.title}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveProject(null)}
+                className="rounded-full border border-black/10 px-4 py-2 text-sm font-semibold text-zinc-700 dark:border-white/10 dark:text-zinc-200"
+              >
+                关闭
+              </button>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+              <span>大小：{formatSize(activeProject.kind, activeProject.size)}</span>
+              {activeProject.fileName ? <span>文件：{activeProject.fileName}</span> : null}
+            </div>
+
+            {activeProject.kind === "SCRATCH" && activeProject.canDownload ? (
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => downloadScratch(activeProject.id)}
+                  disabled={downloadLoadingId === activeProject.id}
+                  className="inline-flex h-11 items-center justify-center rounded-2xl bg-zinc-950 px-5 text-sm font-extrabold text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+                >
+                  {downloadLoadingId === activeProject.id ? "生成下载链接中..." : "下载 Scratch"}
+                </button>
+              </div>
+            ) : null}
+
+            <div className="mt-5 rounded-[1.5rem] border border-black/8 bg-zinc-50 p-4 dark:border-white/10 dark:bg-black/20">
+              <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words font-mono text-sm text-zinc-700 dark:text-zinc-200">
+                {activeProject.preview || "暂无内容"}
+              </pre>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+}

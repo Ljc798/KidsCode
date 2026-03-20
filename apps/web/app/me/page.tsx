@@ -1,5 +1,6 @@
 import TopNav from "@/app/components/TopNav"
 import StudentStatusCard from "@/app/me/StudentStatusCard"
+import MySpacePanel from "@/app/me/MySpacePanel"
 
 export default function MePage() {
   return (
@@ -14,6 +15,10 @@ export default function MePage() {
 
           <div className="mt-6">
             <StudentStatusCard />
+          </div>
+
+          <div className="mt-6">
+            <MySpacePanel />
           </div>
         </div>
       </main>

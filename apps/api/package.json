@@ -16,6 +16,7 @@
     "@kidscode/database": "workspace:*",
     "@prisma/client": "^5.22.0",
     "cors": "^2.8.6",
+    "cos-nodejs-sdk-v5": "^2.15.4",
     "express": "^5.2.1",
     "fastify": "^5.8.2"
   },

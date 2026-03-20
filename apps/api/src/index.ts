@@ -1,3 +1,4 @@
+import "./lib/loadEnv"
 import express from "express"
 import cors from "cors"
 import studentRoutes from "./routes/student.routes"
@@ -10,13 +11,14 @@ import exerciseRoutes from "./routes/exercise.routes"
 import adminExerciseRoutes from "./routes/adminExercise.routes"
 import adminExerciseReviewRoutes from "./routes/adminExerciseReview.routes"
 import petRoutes from "./routes/pet.routes"
+import projectRoutes from "./routes/project.routes"
 
 const app = express()
 
 // 允许所有来源访问（开发环境可用）
 app.use(cors())
 
-app.use(express.json())
+app.use(express.json({ limit: "25mb" }))
 app.use("/students", studentRoutes)
 app.use("/minigames", minigameRoutes)
 app.use("/knowledge", knowledgeRoutes)
@@ -27,6 +29,7 @@ app.use("/pets", petRoutes)
 app.use("/exercises", exerciseRoutes)
 app.use("/admin/exercises", adminExerciseRoutes)
 app.use("/admin/exercise-reviews", adminExerciseReviewRoutes)
+app.use("/projects", projectRoutes)
 
 app.listen(3001, () => {
   console.log("API running on http://localhost:3001")
