@@ -33,7 +33,7 @@ router.get("/:category", async (req, res) => {
         id: true,
         nickname: true,
         dailyPointsEarned: true,
-        xp: true
+        petXp: true
       }
     })
   } else if (category === "xp") {
@@ -42,13 +42,13 @@ router.get("/:category", async (req, res) => {
         className
       },
       orderBy: {
-        xp: "desc"
+        petXp: "desc"
       },
       take: 20,
       select: {
         id: true,
         nickname: true,
-        xp: true
+        petXp: true
       }
     })
   } else if (category === "games") {
@@ -64,7 +64,7 @@ router.get("/:category", async (req, res) => {
         id: true,
         nickname: true,
         gamesCompleted: true,
-        xp: true
+        petXp: true
       }
     })
   } else {
@@ -72,13 +72,13 @@ router.get("/:category", async (req, res) => {
   }
 
   const result = students.map((s, index) => {
-    const levelInfo = computeLevelFromXp(s.xp)
+    const levelInfo = computeLevelFromXp(s.petXp ?? 0)
     return {
       rank: index + 1,
       id: s.id,
       nickname: s.nickname,
       value: category === "daily" ? s.dailyPointsEarned : (category === "xp" ? levelInfo.level : s.gamesCompleted),
-      xp: s.xp,
+      xp: s.petXp ?? 0,
       level: levelInfo.level
     }
   })

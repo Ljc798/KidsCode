@@ -9,7 +9,7 @@ export default function MePage() {
         <div className="rounded-3xl border border-black/5 bg-white/70 p-6 shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-950/50">
           <h1 className="text-2xl font-extrabold tracking-tight">我的</h1>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
-            这里之后会放: 我的积分/星空币、已完成小游戏、最近游戏记录、班级排行榜等。
+            这里现在会展示你的账号信息、积分余额，以及电子宠物成长状态。
           </p>
 
           <div className="mt-6">

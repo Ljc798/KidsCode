@@ -12,6 +12,8 @@ export default function CreateStudentPage() {
   const [age, setAge] = useState("")
   const [className, setClassName] = useState("")
   const [concept, setConcept] = useState<"BRANCH" | "LOOP">("BRANCH")
+  const [petName, setPetName] = useState("小码兽")
+  const [petSpecies, setPetSpecies] = useState("云朵龙")
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
@@ -32,7 +34,9 @@ export default function CreateStudentPage() {
           nickname,
           age: Number(age),
           className: className.trim() ? className : null,
-          concept
+          concept,
+          petName,
+          petSpecies
         })
       })
       router.push("/admin/students")
@@ -132,7 +136,7 @@ export default function CreateStudentPage() {
           <input
             value={className}
             onChange={e => setClassName(e.target.value)}
-            placeholder="例如：M1 / M2 / A1 / E1"
+            placeholder="例如：C1 / C2 / C3 / C4 / S1 / S2 / S3 / S4"
             className="h-10 rounded-xl border border-black/10 bg-white/70 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/40"
           />
         </label>
@@ -150,6 +154,32 @@ export default function CreateStudentPage() {
             <option value="LOOP">循环（for / while）</option>
           </select>
         </label>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="grid gap-1 text-sm">
+            <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+              宠物名称
+            </span>
+            <input
+              value={petName}
+              onChange={e => setPetName(e.target.value)}
+              className="h-10 rounded-xl border border-black/10 bg-white/70 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/40"
+              required
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+              宠物种类
+            </span>
+            <input
+              value={petSpecies}
+              onChange={e => setPetSpecies(e.target.value)}
+              className="h-10 rounded-xl border border-black/10 bg-white/70 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/40"
+              required
+            />
+          </label>
+        </div>
 
         <div className="pt-2">
           <button

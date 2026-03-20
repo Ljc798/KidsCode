@@ -11,6 +11,8 @@ type Student = {
   age: number
   className: string | null
   concept: "BRANCH" | "LOOP"
+  petName: string
+  petSpecies: string
   createdAt: string
 }
 
@@ -96,8 +98,9 @@ export default function StudentsPage() {
 
       <div className="mt-5 overflow-hidden rounded-2xl border border-black/10 dark:border-white/10">
         <div className="grid grid-cols-12 gap-2 bg-zinc-950/10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:bg-white/5 dark:text-zinc-200">
-          <div className="col-span-3">Account</div>
-          <div className="col-span-3">Nickname</div>
+          <div className="col-span-2">Account</div>
+          <div className="col-span-2">Nickname</div>
+          <div className="col-span-2">Pet</div>
           <div className="col-span-1">Progress</div>
           <div className="col-span-1 text-right">Age</div>
           <div className="col-span-1">Class</div>
@@ -120,11 +123,14 @@ export default function StudentsPage() {
                 key={student.id}
                 className="grid grid-cols-12 items-center gap-2 px-4 py-3"
               >
-                <div className="col-span-3 truncate font-medium text-zinc-950 dark:text-white">
+                <div className="col-span-2 truncate font-medium text-zinc-950 dark:text-white">
                   {student.account}
                 </div>
-                <div className="col-span-3 truncate text-zinc-700 dark:text-zinc-200">
+                <div className="col-span-2 truncate text-zinc-700 dark:text-zinc-200">
                   {student.nickname}
+                </div>
+                <div className="col-span-2 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                  {student.petName} · {student.petSpecies}
                 </div>
                 <div className="col-span-1 truncate text-xs font-semibold text-zinc-700 dark:text-zinc-200">
                   {student.concept === "LOOP" ? "循环" : "分支"}

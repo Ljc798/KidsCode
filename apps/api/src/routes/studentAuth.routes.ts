@@ -5,8 +5,9 @@ import {
   verifyStudentToken,
   getTokenFromRequest
 } from "../lib/studentToken"
+import { signAdminToken } from "../lib/adminToken"
 import { requireStudent } from "../middleware/requireStudent"
-import { shanghaiDateKey, computeLevelFromXp } from "../lib/studentHelper"
+import { shanghaiDateKey, buildPetProfile } from "../lib/studentHelper"
 
 const router = Router()
 
@@ -17,11 +18,11 @@ function normalizeAccount(input: string) {
   return input.trim().toLowerCase()
 }
 
-function setCookie(res: any, token: string) {
+function serializeCookie(name: string, token: string) {
   const maxAge = 60 * 60 * 24 * 7
   const secure = process.env.NODE_ENV === "production"
-  const cookie = [
-    `kidscode_student=${token}`,
+  return [
+    `${name}=${token}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
@@ -30,13 +31,16 @@ function setCookie(res: any, token: string) {
   ]
     .filter(Boolean)
     .join("; ")
-  res.setHeader("Set-Cookie", cookie)
 }
 
-function clearCookie(res: any) {
+function setCookies(res: any, cookies: string[]) {
+  res.setHeader("Set-Cookie", cookies)
+}
+
+function clearCookie(name: string) {
   const secure = process.env.NODE_ENV === "production"
-  const cookie = [
-    "kidscode_student=",
+  return [
+    `${name}=`,
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
@@ -45,7 +49,31 @@ function clearCookie(res: any) {
   ]
     .filter(Boolean)
     .join("; ")
-  res.setHeader("Set-Cookie", cookie)
+}
+
+const PET_SPECIES = ["云朵龙", "奶油猫", "闪电狗", "月光兔", "极光鸟"] as const
+
+function canUseAdmin(user: { role: "STUDENT" | "PARENT" | "ADMIN"; isAdmin: boolean }) {
+  return user.role === "ADMIN" || user.isAdmin
+}
+
+async function ensureStudentProfile(user: {
+  id: string
+  account: string | null
+  phone: string | null
+  student: { id: string; nickname: string } | null
+}) {
+  if (user.student) return user.student
+
+  const nickname = user.account ?? user.phone ?? "管理员"
+  return prisma.student.create({
+    data: {
+      userId: user.id,
+      nickname,
+      age: 18
+    },
+    select: { id: true, nickname: true }
+  })
 }
 
 // POST /auth/student/login
@@ -62,6 +90,9 @@ router.post("/login", async (req, res) => {
       select: {
         id: true,
         role: true,
+        isAdmin: true,
+        account: true,
+        phone: true,
         password: true,
         student: { select: { id: true, nickname: true } }
       }
@@ -72,28 +103,41 @@ router.post("/login", async (req, res) => {
       select: {
         id: true,
         role: true,
+        isAdmin: true,
+        account: true,
+        phone: true,
         password: true,
         student: { select: { id: true, nickname: true } }
       }
     }))
 
-  if (!user || user.role !== "STUDENT" || !user.student) {
-    return res.status(401).json({ error: "invalid credentials" })
+  if (!user || (!user.student && !canUseAdmin(user))) {
+    return res.status(401).json({ error: "账号或密码错误" })
   }
 
   // Back-compat: passwords are currently stored as plaintext in this repo.
   if (user.password !== password) {
-    return res.status(401).json({ error: "invalid credentials" })
+    return res.status(401).json({ error: "账号或密码错误" })
   }
 
-  const token = signStudentToken(user.student.id, 60 * 60 * 24 * 7)
-  setCookie(res, token)
-  return res.json({ ok: true, student: { id: user.student.id, nickname: user.student.nickname } })
+  const student = await ensureStudentProfile(user)
+  const cookies = [serializeCookie("kidscode_student", signStudentToken(student.id, 60 * 60 * 24 * 7))]
+
+  if (canUseAdmin(user)) {
+    cookies.push(serializeCookie("kidscode_admin", signAdminToken(user.id, 60 * 60 * 24 * 7)))
+  }
+
+  setCookies(res, cookies)
+  return res.json({
+    ok: true,
+    student: { id: student.id, nickname: student.nickname },
+    isAdmin: canUseAdmin(user)
+  })
 })
 
 // POST /auth/student/logout
 router.post("/logout", async (_req, res) => {
-  clearCookie(res)
+  setCookies(res, [clearCookie("kidscode_student"), clearCookie("kidscode_admin")])
   return res.json({ ok: true })
 })
 
@@ -103,7 +147,7 @@ router.get("/me", async (req, res) => {
   const ok = token ? verifyStudentToken(token) : null
   if (!ok) return res.status(401).json({ ok: false })
 
-  const student = await prisma.student.findUnique({
+  const student: any = await prisma.student.findUnique({
     where: { id: ok.studentId },
     select: {
       id: true,
@@ -115,7 +159,12 @@ router.get("/me", async (req, res) => {
       starCoinsBalance: true,
       dailyPointsDate: true,
       dailyPointsEarned: true,
-      xp: true,
+      petName: true,
+      petSpecies: true,
+      petXp: true,
+      petMeat: true,
+      petMood: true,
+      petEnergy: true,
       user: { select: { phone: true, account: true } }
     }
   })
@@ -123,7 +172,14 @@ router.get("/me", async (req, res) => {
 
   const todayKey = shanghaiDateKey()
   const earnedToday = student.dailyPointsDate === todayKey ? student.dailyPointsEarned : 0
-  const level = computeLevelFromXp(student.xp)
+  const pet = buildPetProfile({
+    petName: student.petName,
+    petSpecies: student.petSpecies,
+    petXp: student.petXp,
+    petMeat: student.petMeat ?? 0,
+    petMood: student.petMood,
+    petEnergy: student.petEnergy
+  })
 
   return res.json({
     ok: true,
@@ -138,7 +194,80 @@ router.get("/me", async (req, res) => {
       starCoinsBalance: student.starCoinsBalance,
       earnedToday,
       dailyCap: 1000,
-      level
+      pet
+    }
+  })
+})
+
+router.patch("/me", requireStudent, async (req: any, res) => {
+  const studentId = req.studentId as string
+  const nickname = req.body?.nickname === undefined ? undefined : asString(req.body.nickname)
+  const petName = req.body?.petName === undefined ? undefined : asString(req.body.petName)
+  const petSpecies =
+    req.body?.petSpecies === undefined ? undefined : asString(req.body.petSpecies)
+
+  if (nickname !== undefined && !nickname) {
+    return res.status(400).json({ error: "nickname cannot be empty" })
+  }
+  if (petName !== undefined && !petName) {
+    return res.status(400).json({ error: "petName cannot be empty" })
+  }
+  if (petSpecies !== undefined && !PET_SPECIES.includes(petSpecies as (typeof PET_SPECIES)[number])) {
+    return res.status(400).json({ error: "petSpecies is invalid" })
+  }
+
+  const updated: any = await prisma.student.update({
+    where: { id: studentId },
+    data: {
+      ...(nickname === undefined ? {} : { nickname }),
+      ...(petName === undefined ? {} : { petName }),
+      ...(petSpecies === undefined ? {} : { petSpecies })
+    },
+    select: {
+      id: true,
+      nickname: true,
+      age: true,
+      className: true,
+      concept: true,
+      pointsBalance: true,
+      starCoinsBalance: true,
+      dailyPointsDate: true,
+      dailyPointsEarned: true,
+      petName: true,
+      petSpecies: true,
+      petXp: true,
+      petMeat: true,
+      petMood: true,
+      petEnergy: true,
+      user: { select: { phone: true, account: true } }
+    }
+  })
+
+  const todayKey = shanghaiDateKey()
+  const earnedToday = updated.dailyPointsDate === todayKey ? updated.dailyPointsEarned : 0
+  const pet = buildPetProfile({
+    petName: updated.petName,
+    petSpecies: updated.petSpecies,
+    petXp: updated.petXp,
+    petMeat: updated.petMeat ?? 0,
+    petMood: updated.petMood,
+    petEnergy: updated.petEnergy
+  })
+
+  res.json({
+    ok: true,
+    student: {
+      id: updated.id,
+      nickname: updated.nickname,
+      age: updated.age,
+      className: updated.className,
+      concept: updated.concept,
+      account: updated.user.account ?? updated.user.phone,
+      pointsBalance: updated.pointsBalance,
+      starCoinsBalance: updated.starCoinsBalance,
+      earnedToday,
+      dailyCap: 1000,
+      pet
     }
   })
 })
@@ -161,12 +290,17 @@ router.post(
 
     // Use a transaction to avoid race conditions.
     const out = await prisma.$transaction(async tx => {
-      const s = await tx.student.findUnique({
+      const s: any = await tx.student.findUnique({
         where: { id: studentId },
         select: {
           id: true,
           pointsBalance: true,
-          xp: true,
+          petName: true,
+          petSpecies: true,
+          petXp: true,
+          petMeat: true,
+          petMood: true,
+          petEnergy: true,
           dailyPointsDate: true,
           dailyPointsEarned: true
         }
@@ -179,17 +313,25 @@ router.post(
       const added = Math.max(0, Math.min(points, remaining))
       const nextEarned = earnedToday + added
 
-      const updated = await tx.student.update({
+      const updated: any = await tx.student.update({
         where: { id: studentId },
         data: {
           pointsBalance: s.pointsBalance + added,
-          xp: s.xp + added,
+          xp: { increment: added },
+          petXp: s.petXp + added,
+          petMood: Math.min(100, s.petMood + Math.max(1, Math.floor(added / 20))),
+          petEnergy: Math.max(0, s.petEnergy - 1),
           dailyPointsDate: todayKey,
           dailyPointsEarned: nextEarned
         },
         select: {
           pointsBalance: true,
-          xp: true,
+          petName: true,
+          petSpecies: true,
+          petXp: true,
+          petMeat: true,
+          petMood: true,
+          petEnergy: true,
           dailyPointsDate: true,
           dailyPointsEarned: true
         }
@@ -211,7 +353,14 @@ router.post(
 
     if (!out) return res.status(401).json({ ok: false })
 
-    const level = computeLevelFromXp(out.updated.xp)
+    const pet = buildPetProfile({
+      petName: out.updated.petName,
+      petSpecies: out.updated.petSpecies,
+      petXp: out.updated.petXp,
+      petMeat: out.updated.petMeat ?? 0,
+      petMood: out.updated.petMood,
+      petEnergy: out.updated.petEnergy
+    })
     const todayEarned =
       out.updated.dailyPointsDate === todayKey ? out.updated.dailyPointsEarned : 0
 
@@ -221,7 +370,7 @@ router.post(
       pointsBalance: out.updated.pointsBalance,
       earnedToday: todayEarned,
       dailyCap: 1000,
-      level
+      pet
     })
   }
 )

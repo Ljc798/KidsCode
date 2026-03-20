@@ -33,7 +33,7 @@ type LeaderboardResponse = {
 
 function categoryLabel(c: LeaderboardCategory) {
   if (c === "daily") return "今日积分"
-  if (c === "xp") return "等级"
+  if (c === "xp") return "宠物等级"
   return "通关数"
 }
 
@@ -43,11 +43,11 @@ function valueLabel(c: LeaderboardCategory) {
   return "关"
 }
 
-const CLASS_OPTIONS = ["M1", "M2", "A1", "E1"] as const
+const CLASS_OPTIONS = ["C1", "C2", "C3", "C4", "S1", "S2", "S3", "S4"] as const
 
 export default function HomeLeaderboards() {
   const [category, setCategory] = useState<LeaderboardCategory>("daily")
-  const [className, setClassName] = useState<(typeof CLASS_OPTIONS)[number]>("M1")
+  const [className, setClassName] = useState<(typeof CLASS_OPTIONS)[number]>("C1")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [items, setItems] = useState<LeaderboardItem[]>([])
@@ -190,4 +190,3 @@ export default function HomeLeaderboards() {
     </div>
   )
 }
-

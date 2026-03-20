@@ -14,6 +14,8 @@ type StudentDTO = {
   age: number
   className: string | null
   concept: "BRANCH" | "LOOP"
+  petName: string
+  petSpecies: string
   createdAt: string
 }
 
@@ -48,6 +50,8 @@ const serializeStudent = (student: {
   nickname: string
   className: string | null
   concept: "BRANCH" | "LOOP"
+  petName: string
+  petSpecies: string
   createdAt: Date
   user: { account: string | null; phone: string | null }
 }): StudentDTO => ({
@@ -57,6 +61,8 @@ const serializeStudent = (student: {
   age: student.age,
   className: student.className,
   concept: student.concept,
+  petName: student.petName,
+  petSpecies: student.petSpecies,
   createdAt: student.createdAt.toISOString()
 })
 
@@ -80,6 +86,10 @@ router.post(
       req.body?.className === undefined ? null : asString(req.body?.className)
     const conceptRaw = req.body?.concept
     const concept = conceptRaw === undefined ? "BRANCH" : conceptRaw
+    const petName =
+      req.body?.petName === undefined ? "小码兽" : asString(req.body?.petName)
+    const petSpecies =
+      req.body?.petSpecies === undefined ? "云朵龙" : asString(req.body?.petSpecies)
 
     if (!account) return res.status(400).json({ error: "account is required" })
     if (!isValidAccount(account)) {
@@ -95,6 +105,8 @@ router.post(
       return res.status(400).json({ error: "className cannot be empty" })
     if (!isConcept(concept))
       return res.status(400).json({ error: "concept must be BRANCH or LOOP" })
+    if (!petName) return res.status(400).json({ error: "petName is required" })
+    if (!petSpecies) return res.status(400).json({ error: "petSpecies is required" })
 
     try {
       const student = await prisma.student.create({
@@ -103,6 +115,8 @@ router.post(
           nickname,
           className,
           concept,
+          petName,
+          petSpecies,
           user: {
             create: {
               account,
@@ -174,6 +188,9 @@ router.patch(
     const classNameRaw =
       req.body?.className === undefined ? undefined : asString(req.body.className)
     const conceptRaw = req.body?.concept === undefined ? undefined : req.body.concept
+    const petNameRaw = req.body?.petName === undefined ? undefined : asString(req.body.petName)
+    const petSpeciesRaw =
+      req.body?.petSpecies === undefined ? undefined : asString(req.body.petSpecies)
 
     const account =
       accountRaw === undefined ? undefined : normalizeAccount(accountRaw)
@@ -198,6 +215,12 @@ router.patch(
     if (concept !== undefined && !isConcept(concept)) {
       return res.status(400).json({ error: "concept must be BRANCH or LOOP" })
     }
+    if (petNameRaw !== undefined && !petNameRaw) {
+      return res.status(400).json({ error: "petName cannot be empty" })
+    }
+    if (petSpeciesRaw !== undefined && !petSpeciesRaw) {
+      return res.status(400).json({ error: "petSpecies cannot be empty" })
+    }
 
     // Ensure exists and get userId for update/delete safety
     const existing = await prisma.student.findUnique({
@@ -214,6 +237,8 @@ router.patch(
           ...(nickname === undefined ? {} : { nickname }),
           ...(className === undefined ? {} : { className }),
           ...(concept === undefined ? {} : { concept }),
+          ...(petNameRaw === undefined ? {} : { petName: petNameRaw }),
+          ...(petSpeciesRaw === undefined ? {} : { petSpecies: petSpeciesRaw }),
           user: {
             update: {
               ...(account === undefined ? {} : { account }),

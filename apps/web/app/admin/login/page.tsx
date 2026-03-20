@@ -1,4 +1,4 @@
-import AdminLoginClient from "@/app/admin/login/AdminLoginClient"
+import { redirect } from "next/navigation"
 
 export default async function AdminLoginPage({
   searchParams
@@ -7,6 +7,5 @@ export default async function AdminLoginPage({
 }) {
   const sp = await searchParams
   const next = sp?.next ?? "/admin"
-  return <AdminLoginClient next={next} />
+  redirect(`/login?next=${encodeURIComponent(next)}`)
 }
-

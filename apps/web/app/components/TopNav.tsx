@@ -4,12 +4,12 @@ import Image from "next/image"
 export default function TopNav({
   active
 }: {
-  active?: "home" | "games" | "exercises" | "knowledge" | "me"
+  active?: "home" | "games" | "exercises" | "pet" | "knowledge" | "me"
 }) {
   const item = (
     href: string,
     label: string,
-    key: "home" | "games" | "exercises" | "knowledge" | "me"
+    key: "home" | "games" | "exercises" | "pet" | "knowledge" | "me"
   ) => {
     const isActive = active === key
     return (
@@ -43,6 +43,7 @@ export default function TopNav({
           {item("/", "首页", "home")}
           {item("/games", "游戏大全", "games")}
           {item("/exercises", "习题大全", "exercises")}
+          {item("/pet", "电子宠物", "pet")}
           {item("/knowledge/cpp", "知识大全", "knowledge")}
           {item("/me", "我的", "me")}
         </nav>

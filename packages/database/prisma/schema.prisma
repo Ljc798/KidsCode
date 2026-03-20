@@ -13,6 +13,7 @@ model User {
   account   String?  @unique
   password  String
   role      UserRole
+  isAdmin   Boolean  @default(false)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   student Student?
@@ -31,6 +32,12 @@ model Student {
   dailyPointsEarned Int @default(0)
   xp Int @default(0)
   concept Concept @default(BRANCH)
+  petName String @default("小码兽")
+  petSpecies String @default("云朵龙")
+  petXp Int @default(0)
+  petMeat Int @default(0)
+  petMood Int @default(100)
+  petEnergy Int @default(100)
   gamesCompleted Int @default(0)
   codeSubmissions Int @default(0)
   createdAt DateTime @default(now()) @db.Timestamptz(3)

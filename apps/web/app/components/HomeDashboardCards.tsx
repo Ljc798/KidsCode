@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { petEmoji } from "@/app/lib/pet"
 
 type MeResponse =
   | {
@@ -13,7 +14,14 @@ type MeResponse =
         account: string
         className?: string | null
         pointsBalance?: number
-        level?: { level: number; progressPct: number; xp: number; nextLevelXp: number }
+        pet: {
+          name: string
+          species: string
+          stage: string
+          mood: number
+          energy: number
+          level: { level: number; progressPct: number; xp: number; nextLevelXp: number }
+        }
       }
     }
   | { ok: false }
@@ -23,7 +31,7 @@ function ProgressBar({ value }: { value: number }) {
   return (
     <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-zinc-950/10 dark:bg-white/10">
       <div
-        className="h-2 rounded-full bg-zinc-950 dark:bg-white"
+        className="h-2 rounded-full bg-gradient-to-r from-amber-400 via-lime-400 to-sky-400"
         style={{ width: `${v}%` }}
       />
     </div>
@@ -56,10 +64,9 @@ export default function HomeDashboardCards() {
     return nickname ? `Hello，${nickname}` : "Hello"
   }, [loading, nickname])
 
-  const pointsBalance = me?.ok ? (me.student.pointsBalance ?? 0) : 0
-  const level = me?.ok ? me.student.level : null
-  const levelLabel = level ? `Lv. ${level.level}` : "Lv. 1"
-  const progressPct = level ? level.progressPct : 0
+  const pet = me?.ok ? me.student.pet : null
+  const levelLabel = pet ? `Lv. ${pet.level.level}` : "Lv. 1"
+  const progressPct = pet ? pet.level.progressPct : 0
 
   return (
     <div className="relative mt-6 grid gap-3 sm:grid-cols-3">
@@ -86,10 +93,20 @@ export default function HomeDashboardCards() {
 
       <div className="rounded-3xl border border-black/5 bg-white/60 p-4 text-sm dark:border-white/10 dark:bg-white/5">
         <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-          积分余额
+          宠物伙伴
         </div>
-        <div className="mt-1 text-3xl font-extrabold leading-none tabular-nums sm:text-4xl">
-          {pointsBalance}
+        <div className="mt-2 flex items-center gap-3">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-4xl shadow-sm dark:bg-zinc-900">
+            {petEmoji(pet?.species ?? "云朵龙")}
+          </div>
+          <div>
+            <div className="font-extrabold text-zinc-950 dark:text-white">
+              {pet?.name ?? "小码兽"}
+            </div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-400">
+              {pet?.species ?? "云朵龙"} · {pet?.stage ?? "新手伙伴"}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -97,7 +114,7 @@ export default function HomeDashboardCards() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              等级
+              宠物成长
             </div>
             <div className="mt-1 font-extrabold">{levelLabel}</div>
           </div>
@@ -106,6 +123,12 @@ export default function HomeDashboardCards() {
           </div>
         </div>
         <ProgressBar value={progressPct} />
+        <div className="mt-3 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+          <span>{pet?.species ?? "云朵龙"} · {pet?.stage ?? "新手伙伴"}</span>
+          <Link href="/pet" className="font-semibold text-zinc-700 hover:underline dark:text-zinc-200">
+            查看宠物
+          </Link>
+        </div>
       </div>
     </div>
   )

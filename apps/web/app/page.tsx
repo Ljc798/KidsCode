@@ -4,6 +4,9 @@ import FeaturedMiniGames from "@/app/components/FeaturedMiniGames"
 import HomeDashboardCards from "@/app/components/HomeDashboardCards"
 import HomeLeaderboards from "@/app/components/HomeLeaderboards"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.100),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.100),transparent)] dark:bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.950),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.950),transparent)]">
@@ -18,7 +21,7 @@ export default function Home() {
               选一个小游戏，马上开玩
             </h1>
             <p className="mt-3 text-base leading-7 text-zinc-700 dark:text-zinc-200">
-              每天进步一点点。完成关卡可以获得积分，积分可由老师统一兑换星空币（100 分=1 星空币）。
+              每天进步一点点。完成关卡可以获得积分，还会推动你的电子宠物一起成长。积分可由老师统一兑换星空币（100 分=1 星空币）。
             </p>
           </div>
 

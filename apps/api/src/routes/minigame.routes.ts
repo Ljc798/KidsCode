@@ -40,6 +40,9 @@ async function awardPointsOnce(
         id: true,
         pointsBalance: true,
         xp: true,
+        petXp: true,
+        petMood: true,
+        petEnergy: true,
         dailyPointsDate: true,
         dailyPointsEarned: true,
         gamesCompleted: true
@@ -57,6 +60,9 @@ async function awardPointsOnce(
       data: {
         pointsBalance: s.pointsBalance + added,
         xp: s.xp + added,
+        petXp: s.petXp + added,
+        petMood: Math.min(100, s.petMood + Math.max(1, Math.floor(added / 15))),
+        petEnergy: Math.max(0, s.petEnergy - 2),
         dailyPointsDate: todayKey,
         dailyPointsEarned: nextEarned,
         gamesCompleted: miniGameSlug ? s.gamesCompleted + 1 : s.gamesCompleted

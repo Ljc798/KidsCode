@@ -12,7 +12,7 @@ export async function middleware(req: NextRequest) {
     const token = req.cookies.get("kidscode_admin")?.value
     if (!token) {
       const url = req.nextUrl.clone()
-      url.pathname = "/admin/login"
+      url.pathname = "/login"
       url.searchParams.set("next", `${pathname}${search}`)
       return NextResponse.redirect(url)
     }
@@ -25,7 +25,7 @@ export async function middleware(req: NextRequest) {
     })
     if (!meRes.ok) {
       const url = req.nextUrl.clone()
-      url.pathname = "/admin/login"
+      url.pathname = "/login"
       url.searchParams.set("next", `${pathname}${search}`)
       return NextResponse.redirect(url)
     }
@@ -34,6 +34,33 @@ export async function middleware(req: NextRequest) {
   }
 
   // Student protection for gameplay and code submission
+  if (pathname.startsWith("/pet")) {
+    const studentToken = req.cookies.get("kidscode_student")?.value
+    if (studentToken) {
+      const meUrl = new URL("/api/auth/student/me", req.url)
+      const meRes = await fetch(meUrl, {
+        headers: { cookie: `kidscode_student=${studentToken}` },
+        cache: "no-store"
+      })
+      if (meRes.ok) return NextResponse.next()
+    }
+
+    const adminToken = req.cookies.get("kidscode_admin")?.value
+    if (adminToken) {
+      const meUrl = new URL("/api/auth/admin/me", req.url)
+      const meRes = await fetch(meUrl, {
+        headers: { cookie: `kidscode_admin=${adminToken}` },
+        cache: "no-store"
+      })
+      if (meRes.ok) return NextResponse.next()
+    }
+
+    const url = req.nextUrl.clone()
+    url.pathname = "/login"
+    url.searchParams.set("next", `${pathname}${search}`)
+    return NextResponse.redirect(url)
+  }
+
   if (pathname.startsWith("/play") || pathname.startsWith("/exercises")) {
     const token = req.cookies.get("kidscode_student")?.value
     if (!token) {
@@ -60,5 +87,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/play/:path*", "/exercises/:path*"]
+  matcher: ["/admin/:path*", "/play/:path*", "/exercises/:path*", "/pet/:path*"]
 }

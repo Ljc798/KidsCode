@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation"
 export default function AdminLoginClient({ next }: { next: string }) {
   const router = useRouter()
 
-  const [phone, setPhone] = useState("")
+  const [account, setAccount] = useState("")
   const [password, setPassword] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -20,13 +20,13 @@ export default function AdminLoginClient({ next }: { next: string }) {
       const res = await fetch("/api/auth/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, password })
+        body: JSON.stringify({ account, password })
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string }
-      if (!res.ok) throw new Error(data.error ?? "Login failed")
+      if (!res.ok) throw new Error(data.error ?? "账号或密码错误")
       router.replace(next)
     } catch (e2: unknown) {
-      setError(e2 instanceof Error ? e2.message : "Login failed")
+      setError(e2 instanceof Error ? e2.message : "账号或密码错误")
     } finally {
       setSubmitting(false)
     }
@@ -42,6 +42,9 @@ export default function AdminLoginClient({ next }: { next: string }) {
           <h1 className="mt-2 text-2xl font-extrabold tracking-tight">
             登录管理后台
           </h1>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+            一体化账号支持从这里直接登录，输入账号或手机号都可以。
+          </p>
 
           {error ? (
             <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/5 p-3 text-sm text-red-700 dark:text-red-200">
@@ -52,13 +55,15 @@ export default function AdminLoginClient({ next }: { next: string }) {
           <form onSubmit={submit} className="mt-6 grid gap-4">
             <label className="grid gap-1 text-sm">
               <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                Phone
+                账号或手机号
               </span>
               <input
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                type="tel"
-                inputMode="numeric"
+                value={account}
+                onChange={e => setAccount(e.target.value)}
+                type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 className="h-11 rounded-2xl border border-black/10 bg-white/70 px-4 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/40"
                 required
               />

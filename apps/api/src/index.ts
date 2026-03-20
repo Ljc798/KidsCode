@@ -9,6 +9,7 @@ import leaderboardRoutes from "./routes/leaderboard.routes"
 import exerciseRoutes from "./routes/exercise.routes"
 import adminExerciseRoutes from "./routes/adminExercise.routes"
 import adminExerciseReviewRoutes from "./routes/adminExerciseReview.routes"
+import petRoutes from "./routes/pet.routes"
 
 const app = express()
 
@@ -22,6 +23,7 @@ app.use("/knowledge", knowledgeRoutes)
 app.use("/auth/admin", adminAuthRoutes)
 app.use("/auth/student", studentAuthRoutes)
 app.use("/leaderboard", leaderboardRoutes)
+app.use("/pets", petRoutes)
 app.use("/exercises", exerciseRoutes)
 app.use("/admin/exercises", adminExerciseRoutes)
 app.use("/admin/exercise-reviews", adminExerciseReviewRoutes)

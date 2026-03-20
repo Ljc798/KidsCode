@@ -29,3 +29,66 @@ export function computeLevelFromXp(xp: number) {
     }
   }
 }
+
+export function computePetMeatRequired(level: number) {
+  const safeLevel = Math.max(1, Math.floor(level))
+  return Math.min(12, 4 + Math.floor((safeLevel - 1) / 2))
+}
+
+export function applyPetMeatReward(input: {
+  petXp: number
+  petMeat: number
+  addedMeat: number
+}) {
+  let nextXp = Math.max(0, Math.floor(input.petXp))
+  let nextMeat = Math.max(0, Math.floor(input.petMeat)) + Math.max(0, Math.floor(input.addedMeat))
+  let levelInfo = computeLevelFromXp(nextXp)
+  let levelsGained = 0
+
+  while (levelInfo.level < 50) {
+    const neededMeat = computePetMeatRequired(levelInfo.level)
+    if (nextMeat < neededMeat) break
+    nextMeat -= neededMeat
+    nextXp = Math.max(nextXp, levelInfo.nextLevelXp)
+    levelsGained += 1
+    levelInfo = computeLevelFromXp(nextXp)
+  }
+
+  return {
+    petXp: nextXp,
+    petMeat: nextMeat,
+    levelsGained
+  }
+}
+
+export function buildPetProfile(input: {
+  petName: string
+  petSpecies: string
+  petXp: number
+  petMeat: number
+  petMood: number
+  petEnergy: number
+}) {
+  const level = computeLevelFromXp(input.petXp)
+  const safeMeat = Math.max(0, Math.floor(input.petMeat))
+  const meatRequired = computePetMeatRequired(level.level)
+  const safeMood = Math.max(0, Math.min(100, Math.floor(input.petMood)))
+  const safeEnergy = Math.max(0, Math.min(100, Math.floor(input.petEnergy)))
+
+  let stage = "宠物蛋"
+  if (level.level >= 15) stage = "传说伙伴"
+  else if (level.level >= 10) stage = "闪耀守护者"
+  else if (level.level >= 5) stage = "进阶冒险家"
+  else if (level.level >= 2) stage = "新手伙伴"
+
+  return {
+    name: input.petName,
+    species: input.petSpecies,
+    meat: safeMeat,
+    meatPerLevel: meatRequired,
+    mood: safeMood,
+    energy: safeEnergy,
+    stage,
+    level
+  }
+}
