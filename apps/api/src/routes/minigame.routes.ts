@@ -107,7 +107,12 @@ router.get("/:slug", async (req, res) => {
   const slug = asString(req.params.slug)
   if (!slug) return res.status(400).json({ error: "invalid slug" })
 
-  const game = await prisma.miniGame.findUnique({ where: { slug } })
+  const game = await prisma.miniGame.findFirst({
+    where: {
+      slug,
+      isActive: true
+    }
+  })
   if (!game) return res.status(404).json({ error: "not found" })
   res.json(game)
 })
@@ -126,9 +131,12 @@ router.post("/:slug/validate", requireStudentForSubmit, async (req: any, res) =>
 
   const game = await prisma.miniGame.findUnique({
     where: { slug },
-    select: { slug: true, requires: true }
+    select: { slug: true, requires: true, isActive: true }
   })
   if (!game) return res.status(404).json({ ok: false, message: "游戏不存在。" })
+  if (!game.isActive) {
+    return res.status(403).json({ ok: false, message: "该游戏已暂停开放，请联系老师。" })
+  }
   const concept = game.requires
   if (!isConcept(concept))
     return res.status(500).json({ ok: false, message: "invalid concept" })

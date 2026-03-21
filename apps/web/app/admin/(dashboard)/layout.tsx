@@ -29,6 +29,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               Projects
             </Link>
             <Link
+              href="/admin/games"
+              className="rounded-xl border border-black/10 bg-white/60 px-3 py-1.5 font-semibold text-zinc-900 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            >
+              Games
+            </Link>
+            <Link
               href="/admin/reviews"
               className="rounded-xl border border-black/10 bg-white/60 px-3 py-1.5 font-semibold text-zinc-900 dark:border-white/10 dark:bg-white/5 dark:text-white"
             >
@@ -64,6 +70,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               className="block rounded-lg px-3 py-2 text-zinc-800 hover:bg-zinc-950/5 dark:text-zinc-100 dark:hover:bg-white/10"
             >
               Projects
+            </Link>
+            <Link
+              href="/admin/games"
+              className="block rounded-lg px-3 py-2 text-zinc-800 hover:bg-zinc-950/5 dark:text-zinc-100 dark:hover:bg-white/10"
+            >
+              Games
             </Link>
             <Link
               href="/admin/reviews"

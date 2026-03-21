@@ -13,6 +13,7 @@ import adminExerciseReviewRoutes from "./routes/adminExerciseReview.routes"
 import petRoutes from "./routes/pet.routes"
 import projectRoutes from "./routes/project.routes"
 import adminProjectReviewRoutes from "./routes/adminProjectReview.routes"
+import adminMinigameRoutes from "./routes/adminMinigame.routes"
 
 const app = express()
 
@@ -30,6 +31,7 @@ app.use("/pets", petRoutes)
 app.use("/exercises", exerciseRoutes)
 app.use("/admin/exercises", adminExerciseRoutes)
 app.use("/admin/exercise-reviews", adminExerciseReviewRoutes)
+app.use("/admin/minigames", adminMinigameRoutes)
 app.use("/projects", projectRoutes)
 app.use("/admin/project-reviews", adminProjectReviewRoutes)
 

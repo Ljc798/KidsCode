@@ -62,6 +62,19 @@ export default function AdminHomePage() {
             Open center
           </div>
         </Link>
+
+        <Link
+          href="/admin/games"
+          className="group rounded-2xl border border-black/5 bg-gradient-to-b from-white to-zinc-50 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:from-zinc-950 dark:to-zinc-900"
+        >
+          <div className="text-sm font-semibold">Games</div>
+          <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+            One-click disable all games during class time.
+          </div>
+          <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+            Open controls
+          </div>
+        </Link>
       </div>
     </div>
   )
