@@ -137,6 +137,19 @@ function statusLabel(status: "PENDING" | "REVIEWED") {
   return status === "REVIEWED" ? "已批改" : "待批改"
 }
 
+function formatDateTimeToMinute(value: string) {
+  return new Date(value).toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  })
+}
+
+const PAGE_SIZE = 10
+
 export default function AdminReviewsPage() {
   const [items, setItems] = useState<ReviewListItem[]>([])
   const [students, setStudents] = useState<ReviewListResponse["filters"]["students"]>([])
@@ -154,6 +167,7 @@ export default function AdminReviewsPage() {
   const [choiceFeedback, setChoiceFeedback] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [portalReady, setPortalReady] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
 
   useEffect(() => {
     setPortalReady(true)
@@ -175,6 +189,7 @@ export default function AdminReviewsPage() {
       const data = await apiFetch<ReviewListResponse>(`/admin/exercise-reviews${query}`)
       setItems(data.items)
       setStudents(data.filters.students)
+      setCurrentPage(1)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "加载失败")
     } finally {
@@ -185,6 +200,17 @@ export default function AdminReviewsPage() {
   useEffect(() => {
     load()
   }, [query])
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
+
+  const pagedItems = useMemo(
+    () => items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [currentPage, items]
+  )
 
   useEffect(() => {
     if (!activeId) {
@@ -369,7 +395,7 @@ export default function AdminReviewsPage() {
           <div className="px-4 py-8 text-sm text-zinc-600 dark:text-zinc-300">没有符合筛选条件的提交。</div>
         ) : (
           <div className="divide-y divide-black/10 bg-white/50 text-sm dark:divide-white/10 dark:bg-zinc-950/40">
-            {items.map(item => (
+            {pagedItems.map(item => (
               <button
                 key={item.id}
                 type="button"
@@ -397,13 +423,36 @@ export default function AdminReviewsPage() {
                   {item.totalPoints}/{item.totalMaxPoints}
                 </div>
                 <div className="col-span-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  {new Date(item.createdAt).toLocaleDateString()}
+                  {formatDateTimeToMinute(item.createdAt)}
                 </div>
                 <div className="col-span-1 text-right text-xs font-semibold text-zinc-700 dark:text-zinc-200">
                   批改
                 </div>
               </button>
             ))}
+            <div className="flex items-center justify-between px-4 py-3 text-xs text-zinc-600 dark:text-zinc-300">
+              <div>
+                第 {currentPage} / {totalPages} 页
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(page => Math.max(page - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-lg border border-black/10 px-3 py-1.5 disabled:opacity-40 dark:border-white/10"
+                >
+                  上一页
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(page => Math.min(page + 1, totalPages))}
+                  disabled={currentPage >= totalPages}
+                  className="rounded-lg border border-black/10 px-3 py-1.5 disabled:opacity-40 dark:border-white/10"
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -430,6 +479,9 @@ export default function AdminReviewsPage() {
                 </h2>
                 <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                   第 {currentStepIndex + 1}/{steps.length} 题，逐题查看并批改。
+                </p>
+                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  提交时间：{formatDateTimeToMinute(detail.createdAt)}
                 </p>
               </div>
               <button

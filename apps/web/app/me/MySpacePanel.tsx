@@ -66,6 +66,19 @@ function formatDate(value: string) {
   }).format(date)
 }
 
+function formatMonthDayTime(value?: string | null) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date)
+}
+
 function formatSize(kind: ProjectKind, size: number) {
   if (kind === "CPP") return `${size} 字`
   if (size < 1024) return `${size} B`
@@ -792,6 +805,9 @@ int main() {
                   </div>
                   <div className="text-xs text-zinc-500 dark:text-zinc-400">
                     {reviewStatusLabel(activeProject.reviewStatus)}
+                  </div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {formatMonthDayTime(activeProject.reviewedAt ?? activeProject.createdAt)}
                   </div>
                 </div>
                 <div className="mt-2 whitespace-pre-wrap break-words">

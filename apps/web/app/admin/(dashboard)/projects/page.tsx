@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { apiFetch } from "@/app/lib/api"
 
 type ReviewListItem = {
@@ -53,6 +53,19 @@ function statusLabel(status: ReviewListItem["reviewStatus"]) {
   return status === "REVIEWED" ? "已批改" : status === "PENDING" ? "待批改" : "未开始"
 }
 
+function formatDateTimeToMinute(value: string) {
+  return new Date(value).toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  })
+}
+
+const PAGE_SIZE = 8
+
 export default function AdminProjectReviewsPage() {
   const [items, setItems] = useState<ReviewListItem[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -64,6 +77,7 @@ export default function AdminProjectReviewsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const load = async () => {
     setLoading(true)
@@ -76,6 +90,7 @@ export default function AdminProjectReviewsPage() {
       const query = params.toString() ? `?${params.toString()}` : ""
       const data = await apiFetch<{ items: ReviewListItem[] }>(`/admin/project-reviews${query}`)
       setItems(data.items)
+      setCurrentPage(1)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "加载失败")
     } finally {
@@ -86,6 +101,17 @@ export default function AdminProjectReviewsPage() {
   useEffect(() => {
     load()
   }, [weekNumber, kind, reviewStatus])
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
+
+  const pagedItems = useMemo(
+    () => items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [currentPage, items]
+  )
 
   useEffect(() => {
     if (!activeId) {
@@ -197,7 +223,7 @@ export default function AdminProjectReviewsPage() {
             <div className="px-4 py-8 text-sm text-zinc-600 dark:text-zinc-300">暂无课堂创作。</div>
           ) : (
             <div className="divide-y divide-black/10 dark:divide-white/10">
-              {items.map(item => (
+              {pagedItems.map(item => (
                 <button
                   key={item.id}
                   type="button"
@@ -218,8 +244,34 @@ export default function AdminProjectReviewsPage() {
                   <div className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
                     {item.kind} · {item.fileName ?? "无文件名"}
                   </div>
+                  <div className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                    提交时间：{formatDateTimeToMinute(item.createdAt)}
+                  </div>
                 </button>
               ))}
+              <div className="flex items-center justify-between gap-3 px-4 py-3 text-xs text-zinc-600 dark:text-zinc-300">
+                <div>
+                  第 {currentPage} / {totalPages} 页
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(page => Math.max(page - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="rounded-lg border border-black/10 px-3 py-1.5 disabled:opacity-40 dark:border-white/10"
+                  >
+                    上一页
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(page => Math.min(page + 1, totalPages))}
+                    disabled={currentPage >= totalPages}
+                    className="rounded-lg border border-black/10 px-3 py-1.5 disabled:opacity-40 dark:border-white/10"
+                  >
+                    下一页
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -244,6 +296,7 @@ export default function AdminProjectReviewsPage() {
                 <div>学生：{detail.student.nickname} / {detail.student.account}</div>
                 <div>班级：{detail.student.className ?? "未分班"}</div>
                 <div>文件：{detail.fileName ?? "无"}</div>
+                <div>提交时间：{formatDateTimeToMinute(detail.createdAt)}</div>
               </div>
 
               {detail.ideaNote ? (
