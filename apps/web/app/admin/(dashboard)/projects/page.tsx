@@ -49,6 +49,8 @@ type ReviewDetail = {
   }
 }
 
+type RewardType = "NONE" | "MEAT" | "XP"
+
 function statusLabel(status: ReviewListItem["reviewStatus"]) {
   return status === "REVIEWED" ? "已批改" : status === "PENDING" ? "待批改" : "未开始"
 }
@@ -76,6 +78,8 @@ export default function AdminProjectReviewsPage() {
   const [reviewStatus, setReviewStatus] = useState("all")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [rewardType, setRewardType] = useState<RewardType>("NONE")
+  const [rewardAmount, setRewardAmount] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
 
@@ -126,6 +130,8 @@ export default function AdminProjectReviewsPage() {
         const data = await apiFetch<ReviewDetail>(`/admin/project-reviews/${activeId}`)
         setDetail(data)
         setTeacherComment(data.teacherComment ?? "")
+        setRewardType("NONE")
+        setRewardAmount("")
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "加载详情失败")
       }
@@ -141,12 +147,18 @@ export default function AdminProjectReviewsPage() {
     try {
       await apiFetch(`/admin/project-reviews/${detail.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ teacherComment })
+        body: JSON.stringify({
+          teacherComment,
+          rewardType,
+          rewardAmount: rewardType === "NONE" ? 0 : Number(rewardAmount || 0)
+        })
       })
       await load()
       const refreshed = await apiFetch<ReviewDetail>(`/admin/project-reviews/${detail.id}`)
       setDetail(refreshed)
       setTeacherComment(refreshed.teacherComment ?? "")
+      setRewardType("NONE")
+      setRewardAmount("")
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "保存失败")
     } finally {
@@ -317,6 +329,17 @@ export default function AdminProjectReviewsPage() {
                   >
                     下载 Scratch 原文件
                   </button>
+                  <div className="mt-4 rounded-2xl border border-black/10 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/40">
+                    <div className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                      Scratch 在线预览
+                    </div>
+                    <iframe
+                      title="Scratch Preview"
+                      src={`/scratch-gui/player.html?locale=zh-cn&project=${encodeURIComponent(`/api/admin/project-reviews/${detail.id}/download`)}`}
+                      className="h-[420px] w-full rounded-xl border border-black/10 dark:border-white/10"
+                      allowFullScreen
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="mt-5 rounded-2xl border border-black/10 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/40">
@@ -336,14 +359,49 @@ export default function AdminProjectReviewsPage() {
                     className="min-h-32 rounded-2xl border border-black/10 bg-white/70 px-4 py-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
                   />
                 </label>
+                <div className="mt-4 grid gap-3 rounded-2xl border border-black/10 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/40 sm:grid-cols-[180px_1fr]">
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-200">奖励类型</span>
+                    <select
+                      value={rewardType}
+                      onChange={event => {
+                        const next = event.target.value as RewardType
+                        setRewardType(next)
+                        if (next === "NONE") setRewardAmount("")
+                      }}
+                      className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm dark:border-white/10 dark:bg-zinc-950/60"
+                    >
+                      <option value="NONE">不奖励</option>
+                      <option value="MEAT">肉肉</option>
+                      <option value="XP">成长值</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-200">奖励数量</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={rewardAmount}
+                      disabled={rewardType === "NONE"}
+                      onChange={event => setRewardAmount(event.target.value)}
+                      placeholder={rewardType === "MEAT" ? "例如 1" : rewardType === "XP" ? "例如 20" : "选择奖励类型后填写"}
+                      className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-black/20 disabled:cursor-not-allowed disabled:bg-zinc-100 dark:border-white/10 dark:bg-zinc-950/60 dark:disabled:bg-zinc-900"
+                    />
+                  </label>
+                </div>
                 <div className="mt-4 flex gap-3">
                   <button
                     type="button"
                     onClick={saveReview}
-                    disabled={saving || !teacherComment.trim()}
+                    disabled={
+                      saving ||
+                      !teacherComment.trim() ||
+                      (rewardType !== "NONE" && (!Number.isInteger(Number(rewardAmount)) || Number(rewardAmount) <= 0))
+                    }
                     className="inline-flex h-11 items-center justify-center rounded-2xl bg-zinc-950 px-5 text-sm font-extrabold text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
                   >
-                    {saving ? "保存中..." : "保存评语"}
+                    {saving ? "保存中..." : "保存评语并发奖励"}
                   </button>
                 </div>
               </div>

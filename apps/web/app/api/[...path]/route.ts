@@ -90,10 +90,16 @@ async function proxy(req: Request) {
     // Copy important headers.
     const passHeaders = [
       "content-type",
+      "content-disposition",
+      "content-length",
+      "content-encoding",
       "cache-control",
       "location",
       "vary",
-      "content-language"
+      "content-language",
+      "accept-ranges",
+      "etag",
+      "last-modified"
     ]
     for (const h of passHeaders) {
       const v = upstreamRes.headers.get(h)

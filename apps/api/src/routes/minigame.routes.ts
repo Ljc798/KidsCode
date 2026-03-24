@@ -2,7 +2,7 @@ import { Router } from "express"
 import type { Request, Response, NextFunction } from "express"
 import { prisma } from "@kidscode/database"
 import { getTokenFromRequest, verifyStudentToken } from "../lib/studentToken"
-import { shanghaiDateKey } from "../lib/studentHelper"
+import { recoverPetEnergy, shanghaiDateKey } from "../lib/studentHelper"
 
 const router = Router()
 
@@ -43,6 +43,7 @@ async function awardPointsOnce(
         petXp: true,
         petMood: true,
         petEnergy: true,
+        petEnergyRefreshedAt: true,
         dailyPointsDate: true,
         dailyPointsEarned: true,
         gamesCompleted: true
@@ -54,6 +55,10 @@ async function awardPointsOnce(
     const remaining = Math.max(0, cap - earnedToday)
     const added = Math.max(0, Math.min(Math.floor(requested), remaining))
     const nextEarned = earnedToday + added
+    const recovered = recoverPetEnergy({
+      petEnergy: s.petEnergy,
+      petEnergyRefreshedAt: s.petEnergyRefreshedAt
+    })
 
     const updated = await tx.student.update({
       where: { id: studentId },
@@ -62,7 +67,8 @@ async function awardPointsOnce(
         xp: s.xp + added,
         petXp: s.petXp + added,
         petMood: Math.min(100, s.petMood + Math.max(1, Math.floor(added / 15))),
-        petEnergy: Math.max(0, s.petEnergy - 2),
+        petEnergy: Math.max(0, recovered.energy - 2),
+        petEnergyRefreshedAt: new Date(),
         dailyPointsDate: todayKey,
         dailyPointsEarned: nextEarned,
         gamesCompleted: miniGameSlug ? s.gamesCompleted + 1 : s.gamesCompleted

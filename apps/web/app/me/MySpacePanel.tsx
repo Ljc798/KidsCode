@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
 import type { ChangeEvent } from "react"
 import CodeEditor from "@/app/exercises/CodeEditor"
@@ -361,13 +362,21 @@ export default function MySpacePanel() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setEditorOpen(true)}
-          className="inline-flex h-11 items-center justify-center rounded-2xl bg-zinc-950 px-5 text-sm font-extrabold text-white shadow-sm hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
-        >
-          上传作品
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/scratch/studio"
+            className="inline-flex h-11 items-center justify-center rounded-2xl border border-black/10 bg-white/60 px-4 text-sm font-extrabold text-zinc-900 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+          >
+            在线搭积木
+          </Link>
+          <button
+            type="button"
+            onClick={() => setEditorOpen(true)}
+            className="inline-flex h-11 items-center justify-center rounded-2xl bg-zinc-950 px-5 text-sm font-extrabold text-white shadow-sm hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            上传作品
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -826,6 +835,20 @@ int main() {
                 >
                   {downloadLoadingId === activeProject.id ? "生成下载链接中..." : "下载 Scratch"}
                 </button>
+              </div>
+            ) : null}
+
+            {activeProject.kind === "SCRATCH" && activeProject.canDownload ? (
+              <div className="mt-5 rounded-[1.5rem] border border-black/8 bg-zinc-50 p-4 dark:border-white/10 dark:bg-black/20">
+                <div className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+                  Scratch 在线预览
+                </div>
+                <iframe
+                  title="Scratch Preview"
+                  src={`/scratch-gui/player.html?locale=zh-cn&project=${encodeURIComponent(`/api/projects/${activeProject.id}/download`)}`}
+                  className="h-[420px] w-full rounded-xl border border-black/10 dark:border-white/10"
+                  allowFullScreen
+                />
               </div>
             ) : null}
 

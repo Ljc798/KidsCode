@@ -7,7 +7,7 @@ import {
 } from "../lib/studentToken"
 import { signAdminToken } from "../lib/adminToken"
 import { requireStudent } from "../middleware/requireStudent"
-import { shanghaiDateKey, buildPetProfile } from "../lib/studentHelper"
+import { shanghaiDateKey, buildPetProfile, recoverPetEnergy } from "../lib/studentHelper"
 
 const router = Router()
 
@@ -159,26 +159,45 @@ router.get("/me", async (req, res) => {
       starCoinsBalance: true,
       dailyPointsDate: true,
       dailyPointsEarned: true,
+      exercisePointsDate: true,
+      exercisePointsEarned: true,
       petName: true,
       petSpecies: true,
       petXp: true,
       petMeat: true,
       petMood: true,
       petEnergy: true,
+      petEnergyRefreshedAt: true,
       user: { select: { phone: true, account: true } }
     }
   })
   if (!student) return res.status(401).json({ ok: false })
 
+  const recovered = recoverPetEnergy({
+    petEnergy: student.petEnergy,
+    petEnergyRefreshedAt: student.petEnergyRefreshedAt
+  })
+  if (recovered.shouldPersist) {
+    await prisma.student.update({
+      where: { id: student.id },
+      data: {
+        petEnergy: recovered.energy,
+        petEnergyRefreshedAt: recovered.refreshedAt
+      }
+    })
+  }
+
   const todayKey = shanghaiDateKey()
   const earnedToday = student.dailyPointsDate === todayKey ? student.dailyPointsEarned : 0
+  const exerciseEarnedToday =
+    student.exercisePointsDate === todayKey ? student.exercisePointsEarned : 0
   const pet = buildPetProfile({
     petName: student.petName,
     petSpecies: student.petSpecies,
     petXp: student.petXp,
     petMeat: student.petMeat ?? 0,
     petMood: student.petMood,
-    petEnergy: student.petEnergy
+    petEnergy: recovered.energy
   })
 
   return res.json({
@@ -194,6 +213,8 @@ router.get("/me", async (req, res) => {
       starCoinsBalance: student.starCoinsBalance,
       earnedToday,
       dailyCap: 1000,
+      exerciseEarnedToday,
+      exerciseDailyCap: 200,
       pet
     }
   })
@@ -233,6 +254,8 @@ router.patch("/me", requireStudent, async (req: any, res) => {
       starCoinsBalance: true,
       dailyPointsDate: true,
       dailyPointsEarned: true,
+      exercisePointsDate: true,
+      exercisePointsEarned: true,
       petName: true,
       petSpecies: true,
       petXp: true,
@@ -245,6 +268,8 @@ router.patch("/me", requireStudent, async (req: any, res) => {
 
   const todayKey = shanghaiDateKey()
   const earnedToday = updated.dailyPointsDate === todayKey ? updated.dailyPointsEarned : 0
+  const exerciseEarnedToday =
+    updated.exercisePointsDate === todayKey ? updated.exercisePointsEarned : 0
   const pet = buildPetProfile({
     petName: updated.petName,
     petSpecies: updated.petSpecies,
@@ -267,6 +292,8 @@ router.patch("/me", requireStudent, async (req: any, res) => {
       starCoinsBalance: updated.starCoinsBalance,
       earnedToday,
       dailyCap: 1000,
+      exerciseEarnedToday,
+      exerciseDailyCap: 200,
       pet
     }
   })
@@ -301,6 +328,7 @@ router.post(
           petMeat: true,
           petMood: true,
           petEnergy: true,
+          petEnergyRefreshedAt: true,
           dailyPointsDate: true,
           dailyPointsEarned: true
         }
@@ -312,6 +340,10 @@ router.post(
       const remaining = Math.max(0, cap - earnedToday)
       const added = Math.max(0, Math.min(points, remaining))
       const nextEarned = earnedToday + added
+      const recovered = recoverPetEnergy({
+        petEnergy: s.petEnergy,
+        petEnergyRefreshedAt: s.petEnergyRefreshedAt
+      })
 
       const updated: any = await tx.student.update({
         where: { id: studentId },
@@ -320,7 +352,8 @@ router.post(
           xp: { increment: added },
           petXp: s.petXp + added,
           petMood: Math.min(100, s.petMood + Math.max(1, Math.floor(added / 20))),
-          petEnergy: Math.max(0, s.petEnergy - 1),
+          petEnergy: Math.max(0, recovered.energy - 1),
+          petEnergyRefreshedAt: new Date(),
           dailyPointsDate: todayKey,
           dailyPointsEarned: nextEarned
         },

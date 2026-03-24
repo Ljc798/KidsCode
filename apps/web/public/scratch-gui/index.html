@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KidsCode Scratch Editor</title>
+    <style>
+      html,
+      body,
+      #app {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #f5f7fb;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <script src="https://unpkg.com/react@16.14.0/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@16.14.0/umd/react-dom.production.min.js"></script>
+    <script>
+      window.react = window.React
+      window["react-dom"] = window.ReactDOM
+    </script>
+    <script src="/scratch-gui/scratch-gui.js"></script>
+    <script>
+      ;(function () {
+        var search = new URLSearchParams(window.location.search)
+        var forcedLocale = (search.get("locale") || search.get("lang") || "zh-cn").toLowerCase()
+        if (forcedLocale === "zh-cn" || forcedLocale === "zh_cn") forcedLocale = "zh-cn"
+        try {
+          window.localStorage.setItem("kidscode-scratch-locale", forcedLocale)
+        } catch (e) {}
+        var localAssetHost = window.location.origin
+        var appInstance = null
+        var SDK = window.GUI
+        if (!SDK) return
+        var Raw = SDK.default || SDK
+        var Wrapped = typeof SDK.AppStateHOC === "function" ? SDK.AppStateHOC(Raw, false) : Raw
+        if (typeof SDK.setAppElement === "function") {
+          SDK.setAppElement("#app")
+        }
+        appInstance = ReactDOM.render(
+          React.createElement(Wrapped, {
+            canSave: false,
+            canCreateNew: true,
+            canShare: false,
+            canUseCloud: false,
+            showTelemetryModal: false,
+            isPlayerOnly: false,
+            isFullScreen: false,
+            locale: forcedLocale,
+            projectHost: "https://projects.scratch.mit.edu",
+            assetHost: localAssetHost
+          }),
+          document.getElementById("app")
+        )
+
+        function blobToDataUrl(blob) {
+          return new Promise(function (resolve, reject) {
+            var reader = new FileReader()
+            reader.onload = function () {
+              resolve(typeof reader.result === "string" ? reader.result : "")
+            }
+            reader.onerror = function () {
+              reject(new Error("读取 Scratch 数据失败"))
+            }
+            reader.readAsDataURL(blob)
+          })
+        }
+
+        function exportProjectBlob(vm) {
+          if (!vm || typeof vm.saveProjectSb3 !== "function") {
+            return Promise.reject(new Error("Scratch VM 未就绪"))
+          }
+          try {
+            var maybePromise = vm.saveProjectSb3()
+            if (maybePromise && typeof maybePromise.then === "function") {
+              return maybePromise
+            }
+          } catch (e) {}
+          return new Promise(function (resolve) {
+            vm.saveProjectSb3(resolve)
+          })
+        }
+
+        window.addEventListener("message", async function (event) {
+          var data = event.data || {}
+          if (data.type !== "KIDSCODE_UPLOAD_SCRATCH") return
+          var requestId = data.requestId
+          var payload = data.payload || {}
+
+          try {
+            var store = appInstance && appInstance.store
+            var vm = store && store.getState && store.getState().scratchGui && store.getState().scratchGui.vm
+            var blob = await exportProjectBlob(vm)
+            var content = await blobToDataUrl(blob)
+            var fileName = (payload.title || "scratch-project").trim() + ".sb3"
+
+            var res = await fetch("/api/projects", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                category: payload.category,
+                weekNumber: payload.category === "CLASSROOM" ? payload.weekNumber : undefined,
+                title: payload.title,
+                ideaNote: payload.ideaNote,
+                commonMistakes: payload.category === "CLASSROOM" ? payload.commonMistakes : undefined,
+                kind: "SCRATCH",
+                content: content,
+                fileName: fileName,
+                mimeType: "application/octet-stream"
+              })
+            })
+
+            var json = await res.json().catch(function () {
+              return { ok: false, error: "上传失败" }
+            })
+            if (!res.ok || !json.ok) {
+              throw new Error((json && json.error) || "上传失败")
+            }
+
+            event.source.postMessage(
+              { type: "KIDSCODE_UPLOAD_RESULT", requestId: requestId, ok: true },
+              event.origin
+            )
+          } catch (err) {
+            event.source.postMessage(
+              {
+                type: "KIDSCODE_UPLOAD_RESULT",
+                requestId: requestId,
+                ok: false,
+                error: err && err.message ? err.message : "上传失败"
+              },
+              event.origin
+            )
+          }
+        })
+      })()
+    </script>
+  </body>
+</html>

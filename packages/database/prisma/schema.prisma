@@ -30,6 +30,8 @@ model Student {
   starCoinsBalance Int @default(0)
   dailyPointsDate String?
   dailyPointsEarned Int @default(0)
+  exercisePointsDate String?
+  exercisePointsEarned Int @default(0)
   xp Int @default(0)
   concept Concept @default(BRANCH)
   petName String @default("小码兽")
@@ -38,6 +40,7 @@ model Student {
   petMeat Int @default(0)
   petMood Int @default(100)
   petEnergy Int @default(100)
+  petEnergyRefreshedAt DateTime @default(now()) @db.Timestamptz(3)
   gamesCompleted Int @default(0)
   codeSubmissions Int @default(0)
   createdAt DateTime @default(now()) @db.Timestamptz(3)

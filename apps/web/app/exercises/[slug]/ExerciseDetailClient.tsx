@@ -61,6 +61,15 @@ type SubmissionResponse = {
   total: number
   multipleChoicePoints: number
   codingMaxPoints: number
+  reward: {
+    pointsRequested: number
+    pointsAdded: number
+    pointsEarnedToday: number
+    pointsDailyCap: number
+    xpAdded: number
+    pointsBalance: number
+    petXp: number
+  }
   results: SubmissionResult[]
 }
 
@@ -123,6 +132,28 @@ function PromptBlock({ text }: { text: string }) {
           </pre>
         ) : (
           <div key={index} className="whitespace-pre-wrap">
+            {part}
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
+function OptionText({ text }: { text: string }) {
+  const parts = text.split(/```/)
+  return (
+    <div className="space-y-2">
+      {parts.map((part, index) =>
+        index % 2 === 1 ? (
+          <pre
+            key={index}
+            className="overflow-x-auto whitespace-pre-wrap rounded-xl border border-current/20 bg-black/5 px-3 py-2 font-mono text-[13px] leading-6 dark:bg-white/10"
+          >
+            {part.trim()}
+          </pre>
+        ) : (
+          <div key={index} className="whitespace-pre-wrap break-words">
             {part}
           </div>
         )
@@ -378,6 +409,9 @@ export default function ExerciseDetailClient() {
               <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                 {exercise.summary || "逐题作答，提交后可在右侧查看本题库的历史记录。"}
               </p>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                习题奖励：积分上限 200/天（独立于游戏 1000/天）；成长值奖励不设上限。
+              </p>
             </div>
 
             <div className="flex items-center gap-2">
@@ -393,20 +427,18 @@ export default function ExerciseDetailClient() {
               >
                 答题
               </button>
-              {!isCodingSolveView ? (
-                <button
-                  type="button"
-                  onClick={() => setMode("records")}
-                  className={[
-                    "rounded-full px-4 py-2 text-sm font-medium transition",
-                    mode === "records"
-                      ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
-                      : "border border-black/10 text-zinc-700 dark:border-white/10 dark:text-zinc-200"
-                  ].join(" ")}
-                >
-                  提交记录
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => setMode("records")}
+                className={[
+                  "rounded-full px-4 py-2 text-sm font-medium transition",
+                  mode === "records"
+                    ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                    : "border border-black/10 text-zinc-700 dark:border-white/10 dark:text-zinc-200"
+                ].join(" ")}
+              >
+                提交记录
+              </button>
               <Link
                 href="/exercises"
                 className="rounded-full border border-black/10 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
@@ -455,7 +487,7 @@ export default function ExerciseDetailClient() {
                       isWrongSelected ? "!border-red-500 !bg-red-500/10 !text-red-700 dark:!text-red-200" : ""
                     ].join(" ")}
                   >
-                    {option.text}
+                    <OptionText text={option.text} />
                   </button>
                 )
               })}
@@ -569,6 +601,13 @@ export default function ExerciseDetailClient() {
             {isReviewMode ? activeRecord?.submission.totalPoints : submitResult?.submission.totalPoints}/
             {isReviewMode ? activeRecord?.submission.totalMaxPoints : submitResult?.submission.totalMaxPoints}。编程题状态：
             {activeSubmissionStatus ? codingStatusLabel(activeSubmissionStatus) : "未提交"}。
+            {!isReviewMode && submitResult ? (
+              <>
+                {" "}
+                本次奖励积分 +{submitResult.reward.pointsAdded}（计入习题上限{" "}
+                {submitResult.reward.pointsEarnedToday}/{submitResult.reward.pointsDailyCap}），成长值 +{submitResult.reward.xpAdded}（不设上限）。
+              </>
+            ) : null}
           </div>
         )}
 

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KidsCode Scratch Player</title>
+    <style>
+      html,
+      body,
+      #app {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #f5f7fb;
+      }
+
+      #status {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        z-index: 20;
+        max-width: calc(100% - 24px);
+        border-radius: 10px;
+        padding: 8px 12px;
+        font: 600 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #334155;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(15, 23, 42, 0.12);
+      }
+
+      #status.error {
+        color: #b91c1c;
+        border-color: rgba(239, 68, 68, 0.3);
+        background: rgba(254, 242, 242, 0.95);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="status">正在加载 Scratch 预览...</div>
+
+    <script src="https://unpkg.com/react@16.14.0/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@16.14.0/umd/react-dom.production.min.js"></script>
+    <script>
+      window.react = window.React
+      window["react-dom"] = window.ReactDOM
+    </script>
+    <script src="/scratch-gui/scratch-gui.js"></script>
+    <script>
+      ;(function () {
+        var statusEl = document.getElementById("status")
+        var search = new URLSearchParams(window.location.search)
+        var projectParam = search.get("project")
+        var locale = (search.get("locale") || "zh-cn").toLowerCase()
+        var SDK = window.GUI
+
+        function setStatus(message, isError) {
+          if (!statusEl) return
+          statusEl.textContent = message
+          statusEl.className = isError ? "error" : ""
+        }
+
+        if (!SDK) {
+          setStatus("Scratch 预览器加载失败。", true)
+          return
+        }
+        if (!projectParam) {
+          setStatus("缺少项目地址，无法预览。", true)
+          return
+        }
+
+        var projectUrl
+        try {
+          projectUrl = new URL(projectParam, window.location.origin).toString()
+        } catch (e) {
+          setStatus("项目地址无效，无法预览。", true)
+          return
+        }
+
+        var Raw = SDK.default || SDK
+        var Wrapped = typeof SDK.AppStateHOC === "function" ? SDK.AppStateHOC(Raw, false) : Raw
+        if (typeof SDK.setAppElement === "function") {
+          SDK.setAppElement("#app")
+        }
+
+        var appInstance = ReactDOM.render(
+          React.createElement(Wrapped, {
+            canSave: false,
+            canCreateNew: false,
+            canShare: false,
+            canUseCloud: false,
+            showTelemetryModal: false,
+            isPlayerOnly: true,
+            isFullScreen: false,
+            locale: locale,
+            projectHost: "https://projects.scratch.mit.edu",
+            assetHost: window.location.origin
+          }),
+          document.getElementById("app")
+        )
+
+        function waitForVm(maxWaitMs) {
+          return new Promise(function (resolve, reject) {
+            var start = Date.now()
+            var timer = setInterval(function () {
+              var store = appInstance && appInstance.store
+              var vm = store && store.getState && store.getState().scratchGui && store.getState().scratchGui.vm
+              if (vm && typeof vm.loadProject === "function") {
+                clearInterval(timer)
+                resolve(vm)
+                return
+              }
+              if (Date.now() - start > maxWaitMs) {
+                clearInterval(timer)
+                reject(new Error("Scratch VM 未就绪"))
+              }
+            }, 120)
+          })
+        }
+
+        ;(async function () {
+          try {
+            var vm = await waitForVm(10000)
+            var resp = await fetch(projectUrl, { credentials: "include", cache: "no-store" })
+            if (!resp.ok) {
+              throw new Error("下载项目文件失败(" + resp.status + ")")
+            }
+            var arr = await resp.arrayBuffer()
+            await vm.loadProject(arr)
+            setStatus("预览已就绪")
+            setTimeout(function () {
+              if (statusEl) statusEl.style.display = "none"
+            }, 1200)
+          } catch (err) {
+            setStatus(err && err.message ? err.message : "预览失败", true)
+          }
+        })()
+      })()
+    </script>
+  </body>
+</html>

@@ -19,6 +19,8 @@ type MeResponse =
         pointsBalance?: number
         earnedToday?: number
         dailyCap?: number
+        exerciseEarnedToday?: number
+        exerciseDailyCap?: number
         pet: {
           name: string
           species: PetSpecies
@@ -133,9 +135,15 @@ export default function StudentStatusCard() {
                 积分：<span className="font-semibold">{me.student.pointsBalance ?? 0}</span>
               </div>
               <div>
-                今日已得：{" "}
+                今日游戏积分：{" "}
                 <span className="font-semibold">
                   {me.student.earnedToday ?? 0}/{me.student.dailyCap ?? 1000}
+                </span>
+              </div>
+              <div>
+                今日习题积分（独立）：{" "}
+                <span className="font-semibold">
+                  {me.student.exerciseEarnedToday ?? 0}/{me.student.exerciseDailyCap ?? 200}
                 </span>
               </div>
               <div>

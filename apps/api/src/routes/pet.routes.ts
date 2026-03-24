@@ -1,6 +1,11 @@
 import { Router } from "express"
 import { prisma } from "@kidscode/database"
-import { applyPetMeatReward, buildPetProfile, shanghaiDateKey } from "../lib/studentHelper"
+import {
+  applyPetMeatReward,
+  buildPetProfile,
+  recoverPetEnergy,
+  shanghaiDateKey
+} from "../lib/studentHelper"
 import { getTokenFromRequest as getStudentToken, verifyStudentToken } from "../lib/studentToken"
 import { getTokenFromRequest as getAdminToken, verifyAdminToken } from "../lib/adminToken"
 
@@ -36,6 +41,7 @@ async function awardQuickPoints(studentId: string, requested: number) {
         petMeat: true,
         petMood: true,
         petEnergy: true,
+        petEnergyRefreshedAt: true,
         dailyPointsDate: true,
         dailyPointsEarned: true
       }
@@ -46,6 +52,10 @@ async function awardQuickPoints(studentId: string, requested: number) {
     const remaining = Math.max(0, cap - earnedToday)
     const added = Math.max(0, Math.min(Math.floor(requested), remaining))
     const nextEarned = earnedToday + added
+    const recovered = recoverPetEnergy({
+      petEnergy: current.petEnergy,
+      petEnergyRefreshedAt: current.petEnergyRefreshedAt
+    })
 
     const updated: any = await tx.student.update({
       where: { id: studentId },
@@ -54,7 +64,8 @@ async function awardQuickPoints(studentId: string, requested: number) {
         xp: current.xp + added,
         petXp: current.petXp + added,
         petMood: Math.min(100, current.petMood + Math.max(2, Math.floor(added / 5))),
-        petEnergy: Math.min(100, current.petEnergy + Math.max(1, Math.floor(added / 10))),
+        petEnergy: Math.min(100, recovered.energy + Math.max(1, Math.floor(added / 10))),
+        petEnergyRefreshedAt: new Date(),
         dailyPointsDate: todayKey,
         dailyPointsEarned: nextEarned
       },
@@ -96,7 +107,8 @@ async function awardQuickMeat(studentId: string, requested: number) {
         petXp: true,
         petMeat: true,
         petMood: true,
-        petEnergy: true
+        petEnergy: true,
+        petEnergyRefreshedAt: true
       }
     })
     if (!current) return null
@@ -114,7 +126,14 @@ async function awardQuickMeat(studentId: string, requested: number) {
         petXp: nextPet.petXp,
         petMeat: nextPet.petMeat,
         petMood: Math.min(100, current.petMood + Math.max(4, added * 3)),
-        petEnergy: Math.min(100, current.petEnergy + Math.max(3, added * 2))
+        petEnergy: Math.min(
+          100,
+          recoverPetEnergy({
+            petEnergy: current.petEnergy,
+            petEnergyRefreshedAt: current.petEnergyRefreshedAt
+          }).energy + Math.max(3, added * 2)
+        ),
+        petEnergyRefreshedAt: new Date()
       },
       select: {
         id: true,
@@ -201,6 +220,7 @@ router.get("/", async (req: any, res) => {
       petMeat: true,
       petMood: true,
       petEnergy: true,
+      petEnergyRefreshedAt: true,
       pointsBalance: true
     }
   })
@@ -221,7 +241,10 @@ router.get("/", async (req: any, res) => {
         petXp: student.petXp,
         petMeat: student.petMeat ?? 0,
         petMood: student.petMood,
-        petEnergy: student.petEnergy
+        petEnergy: recoverPetEnergy({
+          petEnergy: student.petEnergy,
+          petEnergyRefreshedAt: student.petEnergyRefreshedAt
+        }).energy
       })
     }))
   })

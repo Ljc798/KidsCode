@@ -1,8 +1,10 @@
 import { Router } from "express"
 import { prisma } from "@kidscode/database"
 import { requireAdmin } from "../middleware/requireAdmin"
+import { shanghaiDateKey } from "../lib/studentHelper"
 
 const router = Router()
+const EXERCISE_DAILY_POINTS_CAP = 200
 
 type ChoiceTeacherFeedback = {
   questionId: string
@@ -19,6 +21,23 @@ const asInt = (value: unknown) => {
     if (Number.isInteger(parsed)) return parsed
   }
   return NaN
+}
+
+function computeExercisePointReward(input: {
+  exercisePointsDate: string | null
+  exercisePointsEarned: number
+  todayKey: string
+  requested: number
+}) {
+  const earnedToday =
+    input.exercisePointsDate === input.todayKey ? input.exercisePointsEarned : 0
+  const remaining = Math.max(0, EXERCISE_DAILY_POINTS_CAP - earnedToday)
+  const added = Math.max(0, Math.min(Math.floor(input.requested), remaining))
+  return {
+    added,
+    nextEarnedToday: earnedToday + added,
+    cap: EXERCISE_DAILY_POINTS_CAP
+  }
 }
 
 function parseChoiceFeedback(value: unknown): ChoiceTeacherFeedback[] | null {
@@ -242,7 +261,9 @@ router.patch("/:id", async (req, res) => {
     where: { id },
     select: {
       id: true,
+      studentId: true,
       multipleChoicePoints: true,
+      codingPoints: true,
       codingMaxPoints: true,
       exerciseBank: {
         select: {
@@ -277,33 +298,113 @@ router.patch("/:id", async (req, res) => {
   const nextStatus = codingStatus === "PENDING" ? "PENDING" : "REVIEWED"
   const reviewedAt = nextStatus === "REVIEWED" ? new Date() : null
   const totalPoints = existing.multipleChoicePoints + codingPoints
+  const codingDelta = Math.max(0, codingPoints - existing.codingPoints)
+  const todayKey = shanghaiDateKey()
 
-  const updated = await prisma.exerciseSubmission.update({
-    where: { id },
-    data: {
-      multipleChoiceFeedback,
-      teacherFeedback: teacherFeedback || null,
-      codingStatus: nextStatus,
-      codingIsCorrect:
-        codingIsCorrectRaw === null || codingIsCorrectRaw === undefined
-          ? null
-          : Boolean(codingIsCorrectRaw),
-      codingPoints,
-      totalPoints,
-      reviewedAt
+  const out = await prisma.$transaction(async tx => {
+    let reward: null | {
+      pointsRequested: number
+      pointsAdded: number
+      pointsEarnedToday: number
+      pointsDailyCap: number
+      xpAdded: number
+      pointsBalance: number
+      petXp: number
+    } = null
+
+    if (codingDelta > 0) {
+      const student = await tx.student.findUnique({
+        where: { id: existing.studentId },
+        select: {
+          id: true,
+          pointsBalance: true,
+          petXp: true,
+          exercisePointsDate: true,
+          exercisePointsEarned: true
+        }
+      })
+      if (!student) return null
+
+      const pointReward = computeExercisePointReward({
+        exercisePointsDate: student.exercisePointsDate,
+        exercisePointsEarned: student.exercisePointsEarned,
+        todayKey,
+        requested: codingDelta
+      })
+      const xpAdded = codingDelta
+
+      const updatedStudent = await tx.student.update({
+        where: { id: student.id },
+        data: {
+          pointsBalance: student.pointsBalance + pointReward.added,
+          petXp: student.petXp + xpAdded,
+          exercisePointsDate: todayKey,
+          exercisePointsEarned: pointReward.nextEarnedToday
+        },
+        select: {
+          pointsBalance: true,
+          petXp: true
+        }
+      })
+
+      await tx.studentActivity.create({
+        data: {
+          studentId: student.id,
+          kind: "POINTS_AWARD",
+          pointsRequested: codingDelta,
+          pointsAdded: pointReward.added,
+          ok: true,
+          meta: {
+            source: "exercise_review_reward",
+            submissionId: id,
+            codingDelta,
+            xpAdded
+          }
+        }
+      })
+
+      reward = {
+        pointsRequested: codingDelta,
+        pointsAdded: pointReward.added,
+        pointsEarnedToday: pointReward.nextEarnedToday,
+        pointsDailyCap: pointReward.cap,
+        xpAdded,
+        pointsBalance: updatedStudent.pointsBalance,
+        petXp: updatedStudent.petXp
+      }
     }
+
+    const updated = await tx.exerciseSubmission.update({
+      where: { id },
+      data: {
+        multipleChoiceFeedback,
+        teacherFeedback: teacherFeedback || null,
+        codingStatus: nextStatus,
+        codingIsCorrect:
+          codingIsCorrectRaw === null || codingIsCorrectRaw === undefined
+            ? null
+            : Boolean(codingIsCorrectRaw),
+        codingPoints,
+        totalPoints,
+        reviewedAt
+      }
+    })
+
+    return { updated, reward }
   })
+  if (!out) return res.status(404).json({ error: "student not found" })
 
   res.json({
-    id: updated.id,
-    codingStatus: updated.codingStatus,
-    codingIsCorrect: updated.codingIsCorrect,
-    codingPoints: updated.codingPoints,
-    totalPoints: updated.totalPoints,
-    totalMaxPoints: updated.totalMaxPoints,
-    teacherFeedback: updated.teacherFeedback,
-    multipleChoiceFeedback: serializeChoiceFeedback(updated.multipleChoiceFeedback),
-    reviewedAt: updated.reviewedAt?.toISOString() ?? null
+    id: out.updated.id,
+    codingStatus: out.updated.codingStatus,
+    codingIsCorrect: out.updated.codingIsCorrect,
+    codingPoints: out.updated.codingPoints,
+    totalPoints: out.updated.totalPoints,
+    totalMaxPoints: out.updated.totalMaxPoints,
+    teacherFeedback: out.updated.teacherFeedback,
+    multipleChoiceFeedback: serializeChoiceFeedback(out.updated.multipleChoiceFeedback),
+    reviewedAt: out.updated.reviewedAt?.toISOString() ?? null,
+    reward: out.reward
   })
 })
 

@@ -10,6 +10,57 @@ export function shanghaiDateKey(now = new Date()) {
   return `${get("year")}-${get("month")}-${get("day")}`
 }
 
+const PET_ENERGY_RECOVERY_INTERVAL_MS = 60 * 60 * 1000
+const PET_ENERGY_RECOVERY_PER_HOUR = 5
+
+export function recoverPetEnergy(input: {
+  petEnergy: number
+  petEnergyRefreshedAt: Date | string | null | undefined
+  now?: Date
+}) {
+  const now = input.now ?? new Date()
+  const baseEnergy = Math.max(0, Math.min(100, Math.floor(input.petEnergy)))
+  const baseAt =
+    input.petEnergyRefreshedAt instanceof Date
+      ? input.petEnergyRefreshedAt
+      : input.petEnergyRefreshedAt
+        ? new Date(input.petEnergyRefreshedAt)
+        : now
+  const refreshedAt = Number.isNaN(baseAt.getTime()) ? now : baseAt
+
+  if (baseEnergy >= 100) {
+    return {
+      energy: 100,
+      refreshedAt: now,
+      recovered: 0,
+      shouldPersist: now.getTime() !== refreshedAt.getTime()
+    }
+  }
+
+  const elapsed = now.getTime() - refreshedAt.getTime()
+  if (elapsed < PET_ENERGY_RECOVERY_INTERVAL_MS) {
+    return {
+      energy: baseEnergy,
+      refreshedAt,
+      recovered: 0,
+      shouldPersist: false
+    }
+  }
+
+  const hours = Math.floor(elapsed / PET_ENERGY_RECOVERY_INTERVAL_MS)
+  const recovered = hours * PET_ENERGY_RECOVERY_PER_HOUR
+  const energy = Math.min(100, baseEnergy + recovered)
+  const progressedAt = new Date(refreshedAt.getTime() + hours * PET_ENERGY_RECOVERY_INTERVAL_MS)
+  const nextRefreshedAt = energy >= 100 ? now : progressedAt
+
+  return {
+    energy,
+    refreshedAt: nextRefreshedAt,
+    recovered: Math.max(0, energy - baseEnergy),
+    shouldPersist: energy !== baseEnergy || nextRefreshedAt.getTime() !== refreshedAt.getTime()
+  }
+}
+
 export function computeLevelFromXp(xp: number) {
   // Simple, tunable curve:
   // nextLevelXp = 100 * level * (level + 1) / 2

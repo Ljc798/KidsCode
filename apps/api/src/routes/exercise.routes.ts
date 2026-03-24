@@ -1,8 +1,10 @@
 import { Router } from "express"
 import { prisma } from "@kidscode/database"
 import { requireStudent } from "../middleware/requireStudent"
+import { shanghaiDateKey } from "../lib/studentHelper"
 
 const router = Router()
+const EXERCISE_DAILY_POINTS_CAP = 200
 
 type ChoiceOption = {
   id: string
@@ -84,6 +86,23 @@ const asInt = (value: unknown) => {
     if (Number.isInteger(parsed)) return parsed
   }
   return NaN
+}
+
+function computeExercisePointReward(input: {
+  exercisePointsDate: string | null
+  exercisePointsEarned: number
+  todayKey: string
+  requested: number
+}) {
+  const earnedToday =
+    input.exercisePointsDate === input.todayKey ? input.exercisePointsEarned : 0
+  const remaining = Math.max(0, EXERCISE_DAILY_POINTS_CAP - earnedToday)
+  const added = Math.max(0, Math.min(Math.floor(input.requested), remaining))
+  return {
+    added,
+    nextEarnedToday: earnedToday + added,
+    cap: EXERCISE_DAILY_POINTS_CAP
+  }
 }
 
 function isChoiceOption(value: unknown): value is ChoiceOption {
@@ -586,38 +605,115 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
   }))
   const weights = computePointWeights(multipleChoice.length, codingTasks.length)
   const multipleChoicePoints = Math.round(score * weights.choicePoints)
+  const studentId = req.studentId as string
+  const todayKey = shanghaiDateKey()
 
-  const submission = await prisma.exerciseSubmission.create({
-    data: {
-      exerciseBankId: bank.id,
-      studentId: req.studentId as string,
-      multipleChoiceAnswers: results,
-      multipleChoiceScore: score,
-      multipleChoiceTotal: multipleChoice.length,
-      multipleChoicePoints,
-      codingPoints: 0,
-      codingMaxPoints: weights.codingMaxPoints,
-      totalPoints: multipleChoicePoints,
-      totalMaxPoints: weights.totalMaxPoints,
-      codingAnswer: codingAnswerList.map(item => `${item.title}\n${item.answer}`).join("\n\n"),
-      codingAnswers: codingAnswerList
-    },
-    select: { id: true, codingStatus: true, createdAt: true, totalPoints: true, totalMaxPoints: true, multipleChoicePoints: true, codingMaxPoints: true }
+  const out = await prisma.$transaction(async tx => {
+    const submission = await tx.exerciseSubmission.create({
+      data: {
+        exerciseBankId: bank.id,
+        studentId,
+        multipleChoiceAnswers: results,
+        multipleChoiceScore: score,
+        multipleChoiceTotal: multipleChoice.length,
+        multipleChoicePoints,
+        codingPoints: 0,
+        codingMaxPoints: weights.codingMaxPoints,
+        totalPoints: multipleChoicePoints,
+        totalMaxPoints: weights.totalMaxPoints,
+        codingAnswer: codingAnswerList.map(item => `${item.title}\n${item.answer}`).join("\n\n"),
+        codingAnswers: codingAnswerList
+      },
+      select: {
+        id: true,
+        codingStatus: true,
+        createdAt: true,
+        totalPoints: true,
+        totalMaxPoints: true,
+        multipleChoicePoints: true,
+        codingMaxPoints: true
+      }
+    })
+
+    const student = await tx.student.findUnique({
+      where: { id: studentId },
+      select: {
+        id: true,
+        pointsBalance: true,
+        petXp: true,
+        exercisePointsDate: true,
+        exercisePointsEarned: true
+      }
+    })
+    if (!student) return null
+
+    const pointReward = computeExercisePointReward({
+      exercisePointsDate: student.exercisePointsDate,
+      exercisePointsEarned: student.exercisePointsEarned,
+      todayKey,
+      requested: multipleChoicePoints
+    })
+    const xpAdded = Math.max(0, Math.floor(multipleChoicePoints))
+
+    const updatedStudent = await tx.student.update({
+      where: { id: student.id },
+      data: {
+        pointsBalance: student.pointsBalance + pointReward.added,
+        petXp: student.petXp + xpAdded,
+        exercisePointsDate: todayKey,
+        exercisePointsEarned: pointReward.nextEarnedToday
+      },
+      select: {
+        pointsBalance: true,
+        petXp: true
+      }
+    })
+
+    await tx.studentActivity.create({
+      data: {
+        studentId,
+        kind: "POINTS_AWARD",
+        pointsRequested: multipleChoicePoints,
+        pointsAdded: pointReward.added,
+        ok: true,
+        meta: {
+          source: "exercise_submission_reward",
+          submissionId: submission.id,
+          slug,
+          xpAdded
+        }
+      }
+    })
+
+    return {
+      submission,
+      reward: {
+        pointsRequested: multipleChoicePoints,
+        pointsAdded: pointReward.added,
+        pointsEarnedToday: pointReward.nextEarnedToday,
+        pointsDailyCap: pointReward.cap,
+        xpAdded,
+        pointsBalance: updatedStudent.pointsBalance,
+        petXp: updatedStudent.petXp
+      }
+    }
   })
+  if (!out) return res.status(401).json({ error: "student not found" })
 
   res.json({
     ok: true,
     submission: {
-      id: submission.id,
-      codingStatus: submission.codingStatus,
-      createdAt: submission.createdAt.toISOString(),
-      totalPoints: submission.totalPoints,
-      totalMaxPoints: submission.totalMaxPoints
+      id: out.submission.id,
+      codingStatus: out.submission.codingStatus,
+      createdAt: out.submission.createdAt.toISOString(),
+      totalPoints: out.submission.totalPoints,
+      totalMaxPoints: out.submission.totalMaxPoints
     },
     score,
     total: multipleChoice.length,
     multipleChoicePoints,
-    codingMaxPoints: submission.codingMaxPoints,
+    codingMaxPoints: out.submission.codingMaxPoints,
+    reward: out.reward,
     results
   })
 })

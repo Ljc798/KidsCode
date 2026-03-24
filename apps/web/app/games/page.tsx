@@ -36,7 +36,7 @@ export default function GamesPage() {
             本站面向小学同学，游戏以学习与动手为主。遇到账号问题请联系老师或家长协助。
           </div>
           <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-            联系方式: support@kidscode.example (占位) | 微信群: 由老师统一通知
+            微信号: ljc16607923402
           </div>
         </footer>
       </main>

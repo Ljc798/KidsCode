@@ -17,7 +17,7 @@ export default function ExercisesPage() {
               习题大全
             </h1>
             <p className="mt-4 text-base leading-8 text-zinc-700 dark:text-zinc-200">
-              每套题都包含 3 道选择题和 1 道编程题。进入页面前会校验学生登录，选择题自动乱序，编程题提交后进入后台等待老师批改。
+              每套题都包含选择题和编程题。选择题自动批改，编程题提交后进入后台等待老师批改。
             </p>
           </div>
         </section>

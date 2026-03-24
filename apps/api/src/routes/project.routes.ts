@@ -205,6 +205,50 @@ router.get("/:id/download-url", async (req: any, res) => {
   return res.json({ ok: true, url })
 })
 
+router.get("/:id/download", async (req: any, res) => {
+  const studentId = req.studentId as string
+  const id = asString(req.params.id)
+
+  if (!id) return res.status(400).json({ error: "invalid id" })
+
+  const project = await prisma.studentProject.findFirst({
+    where: {
+      id,
+      studentId
+    },
+    select: {
+      kind: true,
+      objectKey: true,
+      fileName: true,
+      mimeType: true
+    }
+  })
+
+  if (!project) return res.status(404).json({ error: "project not found" })
+  if (project.kind !== "SCRATCH" || !project.objectKey) {
+    return res.status(400).json({ error: "download is only available for scratch files" })
+  }
+
+  const signedUrl = getSignedDownloadUrl(project.objectKey)
+  const upstream = await fetch(signedUrl)
+  if (!upstream.ok) {
+    return res.status(502).json({ error: "failed to fetch scratch file from object storage" })
+  }
+
+  const body = Buffer.from(await upstream.arrayBuffer())
+  const contentType = project.mimeType || upstream.headers.get("content-type") || "application/octet-stream"
+  res.setHeader("content-type", contentType)
+  res.setHeader("cache-control", "private, no-store")
+  if (project.fileName) {
+    res.setHeader(
+      "content-disposition",
+      `inline; filename*=UTF-8''${encodeURIComponent(project.fileName)}`
+    )
+  }
+
+  return res.status(200).send(body)
+})
+
 router.post("/", async (req: any, res) => {
   const studentId = req.studentId as string
   const student = await prisma.student.findUnique({

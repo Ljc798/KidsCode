@@ -21,7 +21,7 @@ export default function Home() {
               选一个小游戏，马上开玩
             </h1>
             <p className="mt-3 text-base leading-7 text-zinc-700 dark:text-zinc-200">
-              每天进步一点点。完成关卡可以获得积分，还会推动你的电子宠物一起成长。积分可由老师统一兑换星空币（100 分=1 星空币）。
+              每天进步一点点。完成关卡可以获得积分，还会推动你的电子宠物一起成长。积分可由老师统一兑换星空币（100分=1星空币）。
             </p>
           </div>
 
@@ -56,7 +56,10 @@ export default function Home() {
               联系方式
             </div>
             <div className="mt-2 text-xs">
-              loujiachen6@gmail.com
+              微信号: ljc16607923402
+            </div>
+            <div className="mt-2 text-xs">
+              急事电联: 16607923402
             </div>
           </div>
           <div>
