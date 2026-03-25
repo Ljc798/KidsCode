@@ -99,6 +99,7 @@ export default function PetStatusPanel() {
 
   const { student } = me
   const { pet } = student
+  const xpGap = Math.max(0, pet.level.nextLevelXp - pet.level.xp)
 
   return (
     <div className="grid gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
@@ -143,7 +144,8 @@ export default function PetStatusPanel() {
           </div>
           <div className="mt-3 flex flex-wrap gap-4 text-sm text-zinc-600 dark:text-zinc-300">
             <div>成长值：{pet.level.xp}</div>
-            <div>下一等级：{pet.level.nextLevelXp}</div>
+            <div>升级阈值：{pet.level.nextLevelXp}</div>
+            <div>还差成长值：{xpGap}</div>
             <div>
               肉肉：{pet.meat}/{pet.meatPerLevel}
             </div>

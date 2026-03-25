@@ -18,6 +18,7 @@ model User {
 
   student Student?
   parent  Parent?
+  adminSentChatMessages ChatMessage[] @relation("AdminSender")
 }
 
 model Student {
@@ -55,6 +56,8 @@ model Student {
   activities   StudentActivity[]
   exerciseSubmissions ExerciseSubmission[]
   projects     StudentProject[]
+  chatThread   ChatThread?
+  studentSentChatMessages ChatMessage[] @relation("StudentSender")
 }
 
 model Parent {
@@ -225,6 +228,44 @@ model ExerciseSubmission {
 enum ExerciseCodingStatus {
   PENDING
   REVIEWED
+}
+
+enum ChatSenderRole {
+  STUDENT
+  ADMIN
+}
+
+model ChatThread {
+  id              String   @id @default(uuid())
+  studentId       String   @unique
+  lastMessageAt   DateTime? @db.Timestamptz(3)
+  lastMessagePreview String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  student Student @relation(fields: [studentId], references: [id])
+  messages ChatMessage[]
+
+  @@index([lastMessageAt])
+}
+
+model ChatMessage {
+  id              String   @id @default(uuid())
+  threadId        String
+  senderRole      ChatSenderRole
+  senderStudentId String?
+  senderAdminUserId String?
+  content         String
+  readByStudentAt DateTime? @db.Timestamptz(3)
+  readByAdminAt   DateTime? @db.Timestamptz(3)
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  thread ChatThread @relation(fields: [threadId], references: [id])
+  senderStudent Student? @relation("StudentSender", fields: [senderStudentId], references: [id])
+  senderAdmin User? @relation("AdminSender", fields: [senderAdminUserId], references: [id])
+
+  @@index([threadId, createdAt])
+  @@index([senderRole, createdAt])
 }
 
 enum StudentProjectKind {

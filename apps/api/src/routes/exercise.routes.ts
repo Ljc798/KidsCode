@@ -5,6 +5,8 @@ import { shanghaiDateKey } from "../lib/studentHelper"
 
 const router = Router()
 const EXERCISE_DAILY_POINTS_CAP = 200
+const EXERCISE_XP_PER_SUBMISSION = 20
+const EXERCISE_DAILY_XP_CAP = 100
 
 type ChoiceOption = {
   id: string
@@ -102,6 +104,24 @@ function computeExercisePointReward(input: {
     added,
     nextEarnedToday: earnedToday + added,
     cap: EXERCISE_DAILY_POINTS_CAP
+  }
+}
+
+function shanghaiDayRange(now = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  })
+  const parts = formatter.formatToParts(now)
+  const year = Number(parts.find(p => p.type === "year")?.value ?? "1970")
+  const month = Number(parts.find(p => p.type === "month")?.value ?? "01")
+  const day = Number(parts.find(p => p.type === "day")?.value ?? "01")
+  const startMs = Date.UTC(year, month - 1, day, 0, 0, 0) - 8 * 60 * 60 * 1000
+  return {
+    start: new Date(startMs),
+    end: new Date(startMs + 24 * 60 * 60 * 1000)
   }
 }
 
@@ -653,7 +673,28 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
       todayKey,
       requested: multipleChoicePoints
     })
-    const xpAdded = Math.max(0, Math.floor(multipleChoicePoints))
+    const dayRange = shanghaiDayRange()
+    const todayActivities = await tx.studentActivity.findMany({
+      where: {
+        studentId,
+        kind: "POINTS_AWARD",
+        createdAt: {
+          gte: dayRange.start,
+          lt: dayRange.end
+        }
+      },
+      select: {
+        meta: true
+      }
+    })
+    const earnedXpToday = todayActivities.reduce((sum, item) => {
+      const meta = item.meta as Record<string, unknown> | null
+      if (!meta || meta.source !== "exercise_submission_reward") return sum
+      const xp = typeof meta.xpAdded === "number" ? meta.xpAdded : Number(meta.xpAdded ?? 0)
+      return sum + (Number.isFinite(xp) ? Math.max(0, Math.floor(xp)) : 0)
+    }, 0)
+    const xpRemaining = Math.max(0, EXERCISE_DAILY_XP_CAP - earnedXpToday)
+    const xpAdded = Math.min(EXERCISE_XP_PER_SUBMISSION, xpRemaining)
 
     const updatedStudent = await tx.student.update({
       where: { id: student.id },
@@ -680,6 +721,7 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
           source: "exercise_submission_reward",
           submissionId: submission.id,
           slug,
+          xpRequested: EXERCISE_XP_PER_SUBMISSION,
           xpAdded
         }
       }
@@ -692,6 +734,9 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
         pointsAdded: pointReward.added,
         pointsEarnedToday: pointReward.nextEarnedToday,
         pointsDailyCap: pointReward.cap,
+        xpRequested: EXERCISE_XP_PER_SUBMISSION,
+        xpEarnedToday: earnedXpToday + xpAdded,
+        xpDailyCap: EXERCISE_DAILY_XP_CAP,
         xpAdded,
         pointsBalance: updatedStudent.pointsBalance,
         petXp: updatedStudent.petXp

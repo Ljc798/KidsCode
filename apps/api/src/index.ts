@@ -1,6 +1,7 @@
 import "./lib/loadEnv"
 import express from "express"
 import cors from "cors"
+import { createServer } from "node:http"
 import studentRoutes from "./routes/student.routes"
 import minigameRoutes from "./routes/minigame.routes"
 import knowledgeRoutes from "./routes/knowledge.routes"
@@ -14,6 +15,8 @@ import petRoutes from "./routes/pet.routes"
 import projectRoutes from "./routes/project.routes"
 import adminProjectReviewRoutes from "./routes/adminProjectReview.routes"
 import adminMinigameRoutes from "./routes/adminMinigame.routes"
+import chatRoutes from "./routes/chat.routes"
+import { attachChatWs } from "./chatWs"
 
 const app = express()
 
@@ -34,7 +37,11 @@ app.use("/admin/exercise-reviews", adminExerciseReviewRoutes)
 app.use("/admin/minigames", adminMinigameRoutes)
 app.use("/projects", projectRoutes)
 app.use("/admin/project-reviews", adminProjectReviewRoutes)
+app.use("/chat", chatRoutes)
 
-app.listen(3001, () => {
+const server = createServer(app)
+attachChatWs(server)
+
+server.listen(3001, () => {
   console.log("API running on http://localhost:3001")
 })

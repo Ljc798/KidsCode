@@ -27,7 +27,13 @@ type MeResponse =
           mood: number
           energy: number
           stage: string
-          level: { level: number; progressPct: number }
+          level: {
+            level: number
+            progressPct: number
+            xp: number
+            prevLevelXp: number
+            nextLevelXp: number
+          }
         }
       }
     }
@@ -45,6 +51,10 @@ export default function StudentStatusCard() {
   const [nickname, setNickname] = useState("")
   const [petName, setPetName] = useState("")
   const [petSpecies, setPetSpecies] = useState<PetSpecies>("云朵龙")
+  const petGap =
+    me?.ok
+      ? Math.max(0, me.student.pet.level.nextLevelXp - me.student.pet.level.xp)
+      : 0
 
   useEffect(() => {
     const run = async () => {
@@ -174,6 +184,9 @@ export default function StudentStatusCard() {
                   </div>
                   <div className="text-xs text-zinc-500 dark:text-zinc-400">
                     {me.student.pet.species} · 进度 {me.student.pet.level.progressPct}%
+                  </div>
+                  <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    成长值 {me.student.pet.level.xp}/{me.student.pet.level.nextLevelXp} · 还差 {petGap}
                   </div>
                 </div>
               </div>

@@ -359,8 +359,8 @@ export default function AdminProjectReviewsPage() {
                     className="min-h-32 rounded-2xl border border-black/10 bg-white/70 px-4 py-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
                   />
                 </label>
-                <div className="mt-4 grid gap-3 rounded-2xl border border-black/10 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/40 sm:grid-cols-[180px_1fr]">
-                  <label className="grid gap-1 text-sm">
+                <div className="mt-4 grid grid-cols-1 gap-3 rounded-2xl border border-black/10 bg-zinc-50 p-4 dark:border-white/10 dark:bg-zinc-900/40 md:grid-cols-[180px_minmax(0,1fr)]">
+                  <label className="grid min-w-0 gap-1 text-sm">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-200">奖励类型</span>
                     <select
                       value={rewardType}
@@ -369,14 +369,14 @@ export default function AdminProjectReviewsPage() {
                         setRewardType(next)
                         if (next === "NONE") setRewardAmount("")
                       }}
-                      className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm dark:border-white/10 dark:bg-zinc-950/60"
+                      className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm dark:border-white/10 dark:bg-zinc-950/60"
                     >
                       <option value="NONE">不奖励</option>
                       <option value="MEAT">肉肉</option>
                       <option value="XP">成长值</option>
                     </select>
                   </label>
-                  <label className="grid gap-1 text-sm">
+                  <label className="grid min-w-0 gap-1 text-sm">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-200">奖励数量</span>
                     <input
                       type="number"
@@ -386,7 +386,7 @@ export default function AdminProjectReviewsPage() {
                       disabled={rewardType === "NONE"}
                       onChange={event => setRewardAmount(event.target.value)}
                       placeholder={rewardType === "MEAT" ? "例如 1" : rewardType === "XP" ? "例如 20" : "选择奖励类型后填写"}
-                      className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-black/20 disabled:cursor-not-allowed disabled:bg-zinc-100 dark:border-white/10 dark:bg-zinc-950/60 dark:disabled:bg-zinc-900"
+                      className="h-10 w-full min-w-0 rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-black/20 disabled:cursor-not-allowed disabled:bg-zinc-100 dark:border-white/10 dark:bg-zinc-950/60 dark:disabled:bg-zinc-900"
                     />
                   </label>
                 </div>
