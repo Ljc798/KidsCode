@@ -1,5 +1,6 @@
 import type { Server as HttpServer } from "node:http"
 import { WebSocketServer, WebSocket } from "ws"
+import { prisma } from "@kidscode/database"
 import {
   createThreadMessage,
   canAccessThread,
@@ -7,6 +8,7 @@ import {
   resolveChatActorFromHeaders,
   type ChatActor
 } from "./lib/chat"
+import type { NotificationDTO } from "./lib/notification"
 
 type ChatWsState = {
   actor: ChatActor
@@ -16,6 +18,7 @@ type ChatWsState = {
 type WsWithState = WebSocket & { __chatState?: ChatWsState }
 
 const threadSockets = new Map<string, Set<WsWithState>>()
+const studentSockets = new Map<string, Set<WsWithState>>()
 
 function safeSend(ws: WebSocket, payload: unknown) {
   if (ws.readyState !== WebSocket.OPEN) return
@@ -52,11 +55,44 @@ function leaveCurrent(ws: WsWithState) {
   if (ws.__chatState) ws.__chatState.subscribedThreadId = null
 }
 
+function joinStudent(ws: WsWithState, studentId: string) {
+  let set = studentSockets.get(studentId)
+  if (!set) {
+    set = new Set()
+    studentSockets.set(studentId, set)
+  }
+  set.add(ws)
+}
+
+function leaveStudent(ws: WsWithState) {
+  if (!ws.__chatState || ws.__chatState.actor.role !== "STUDENT") return
+  const studentId = ws.__chatState.actor.studentId
+  const set = studentSockets.get(studentId)
+  if (!set) return
+  set.delete(ws)
+  if (set.size === 0) studentSockets.delete(studentId)
+}
+
 function broadcastThread(threadId: string, payload: unknown) {
   const set = threadSockets.get(threadId)
   if (!set) return
   for (const ws of set) {
     safeSend(ws, payload)
+  }
+}
+
+export function emitStudentNotification(
+  studentId: string,
+  notification: NotificationDTO | null,
+  unreadCount: number
+) {
+  const set = studentSockets.get(studentId)
+  if (!set) return
+  for (const ws of set) {
+    if (notification) {
+      safeSend(ws, { type: "notification", notification })
+    }
+    safeSend(ws, { type: "notification_unread_count", unreadCount })
   }
 }
 
@@ -75,6 +111,19 @@ export function attachChatWs(server: HttpServer) {
     }
 
     ws.__chatState = { actor, subscribedThreadId: null }
+    if (actor.role === "STUDENT") {
+      joinStudent(ws, actor.studentId)
+      ;(async () => {
+        try {
+          const unreadCount = await (prisma as any).notification.count({
+            where: { recipientStudentId: actor.studentId, isRead: false }
+          })
+          safeSend(ws, { type: "notification_unread_count", unreadCount })
+        } catch {
+          // ignore
+        }
+      })()
+    }
     safeSend(ws, {
       type: "ready",
       role: actor.role,
@@ -136,6 +185,7 @@ export function attachChatWs(server: HttpServer) {
 
     ws.on("close", () => {
       leaveCurrent(ws)
+      leaveStudent(ws)
     })
   })
 

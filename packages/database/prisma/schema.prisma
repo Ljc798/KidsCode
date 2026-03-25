@@ -58,6 +58,7 @@ model Student {
   projects     StudentProject[]
   chatThread   ChatThread?
   studentSentChatMessages ChatMessage[] @relation("StudentSender")
+  notifications Notification[]
 }
 
 model Parent {
@@ -235,6 +236,13 @@ enum ChatSenderRole {
   ADMIN
 }
 
+enum NotificationType {
+  REVIEW_DONE
+  REVIEW_COMMENT
+  REWARD_GRANTED
+  SYSTEM_NOTICE
+}
+
 model ChatThread {
   id              String   @id @default(uuid())
   studentId       String   @unique
@@ -266,6 +274,23 @@ model ChatMessage {
 
   @@index([threadId, createdAt])
   @@index([senderRole, createdAt])
+}
+
+model Notification {
+  id                 String           @id @default(uuid())
+  recipientStudentId String
+  type               NotificationType
+  title              String
+  content            String
+  payload            Json?
+  isRead             Boolean          @default(false)
+  readAt             DateTime?        @db.Timestamptz(3)
+  createdAt          DateTime         @default(now()) @db.Timestamptz(3)
+
+  recipientStudent Student @relation(fields: [recipientStudentId], references: [id])
+
+  @@index([recipientStudentId, createdAt])
+  @@index([recipientStudentId, isRead, createdAt])
 }
 
 enum StudentProjectKind {

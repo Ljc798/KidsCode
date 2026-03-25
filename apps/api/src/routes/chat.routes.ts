@@ -1,4 +1,5 @@
 import { Router } from "express"
+import { prisma } from "@kidscode/database"
 import {
   createThreadMessage,
   ensureAdminThreadByStudent,
@@ -7,6 +8,13 @@ import {
   markThreadRead,
   resolveChatActorFromHeaders
 } from "../lib/chat"
+import {
+  getStudentNotificationUnreadCount,
+  listStudentNotifications,
+  createSystemNoticeBatch,
+  markAllStudentNotificationsRead,
+  markStudentNotificationRead
+} from "../lib/notification"
 
 const router = Router()
 
@@ -81,6 +89,97 @@ router.post("/threads/:id/read", async (req: any, res) => {
   const ok = await markThreadRead(actor, threadId)
   if (!ok) return res.status(404).json({ error: "thread not found" })
   return res.json({ ok: true })
+})
+
+router.get("/notifications", async (req: any, res) => {
+  const actor = getActor(req, res)
+  if (!actor) return
+  if (actor.role !== "STUDENT") return res.json({ ok: true, notifications: [] })
+  const limitRaw = Number(req.query?.limit ?? 50)
+  const limit = Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 50
+  const unreadOnlyRaw = String(req.query?.unreadOnly ?? "").toLowerCase()
+  const unreadOnly = unreadOnlyRaw === "1" || unreadOnlyRaw === "true"
+
+  const notifications = await listStudentNotifications(actor.studentId, { unreadOnly, limit })
+  return res.json({ ok: true, notifications })
+})
+
+router.get("/notifications/unread-count", async (req: any, res) => {
+  const actor = getActor(req, res)
+  if (!actor) return
+  if (actor.role !== "STUDENT") return res.json({ ok: true, unreadCount: 0 })
+  const unreadCount = await getStudentNotificationUnreadCount(actor.studentId)
+  return res.json({ ok: true, unreadCount })
+})
+
+router.post("/notifications/read-all", async (req: any, res) => {
+  const actor = getActor(req, res)
+  if (!actor) return
+  if (actor.role !== "STUDENT") return res.json({ ok: true })
+  await markAllStudentNotificationsRead(actor.studentId)
+  return res.json({ ok: true })
+})
+
+router.post("/notifications/:id/read", async (req: any, res) => {
+  const actor = getActor(req, res)
+  if (!actor) return
+  if (actor.role !== "STUDENT") return res.json({ ok: true })
+  const id = typeof req.params?.id === "string" ? req.params.id.trim() : ""
+  if (!id) return res.status(400).json({ error: "invalid notification id" })
+  await markStudentNotificationRead(actor.studentId, id)
+  return res.json({ ok: true })
+})
+
+router.post("/admin/notifications", async (req: any, res) => {
+  const actor = getActor(req, res)
+  if (!actor) return
+  if (actor.role !== "ADMIN") return res.status(403).json({ error: "forbidden" })
+
+  const title = typeof req.body?.title === "string" ? req.body.title.trim() : ""
+  const content = typeof req.body?.content === "string" ? req.body.content.trim() : ""
+  const targetType =
+    typeof req.body?.targetType === "string" ? req.body.targetType.trim().toUpperCase() : "ALL"
+  const className =
+    typeof req.body?.className === "string" ? req.body.className.trim() : ""
+  const studentId =
+    typeof req.body?.studentId === "string" ? req.body.studentId.trim() : ""
+
+  if (!title) return res.status(400).json({ error: "title is required" })
+  if (!content) return res.status(400).json({ error: "content is required" })
+
+  let recipients: Array<{ id: string }> = []
+  if (targetType === "STUDENT") {
+    if (!studentId) return res.status(400).json({ error: "studentId is required" })
+    recipients = await (prisma as any).student.findMany({
+      where: { id: studentId },
+      select: { id: true }
+    })
+  } else if (targetType === "CLASS") {
+    if (!className) return res.status(400).json({ error: "className is required" })
+    recipients = await (prisma as any).student.findMany({
+      where: { className },
+      select: { id: true }
+    })
+  } else {
+    recipients = await (prisma as any).student.findMany({
+      select: { id: true }
+    })
+  }
+
+  const sentCount = await createSystemNoticeBatch({
+    studentIds: recipients.map(item => item.id),
+    title,
+    content,
+    payload: {
+      source: "admin_broadcast",
+      targetType,
+      className: className || null,
+      studentId: studentId || null,
+      adminUserId: actor.adminUserId
+    }
+  })
+
+  return res.json({ ok: true, sentCount })
 })
 
 export default router

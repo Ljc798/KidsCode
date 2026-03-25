@@ -2,6 +2,7 @@ import { Router } from "express"
 import { prisma } from "@kidscode/database"
 import { requireAdmin } from "../middleware/requireAdmin"
 import { shanghaiDateKey } from "../lib/studentHelper"
+import { createStudentNotification } from "../lib/notification"
 
 const router = Router()
 const EXERCISE_DAILY_POINTS_CAP = 200
@@ -267,7 +268,9 @@ router.patch("/:id", async (req, res) => {
       codingMaxPoints: true,
       exerciseBank: {
         select: {
-          multipleChoice: true
+          multipleChoice: true,
+          title: true,
+          slug: true
         }
       }
     }
@@ -393,6 +396,49 @@ router.patch("/:id", async (req, res) => {
     return { updated, reward }
   })
   if (!out) return res.status(404).json({ error: "student not found" })
+
+  try {
+    await createStudentNotification({
+      recipientStudentId: existing.studentId,
+      type: "REVIEW_DONE",
+      title: "练习已批改",
+      content: `《${existing.exerciseBank.title}》已批改完成，请查看反馈。`,
+      payload: {
+        submissionId: out.updated.id,
+        exerciseTitle: existing.exerciseBank.title,
+        exerciseSlug: existing.exerciseBank.slug
+      }
+    })
+
+    if (out.updated.teacherFeedback) {
+      await createStudentNotification({
+        recipientStudentId: existing.studentId,
+        type: "REVIEW_COMMENT",
+        title: "老师新增了评语",
+        content: out.updated.teacherFeedback.slice(0, 120),
+        payload: {
+          submissionId: out.updated.id,
+          exerciseSlug: existing.exerciseBank.slug
+        }
+      })
+    }
+
+    if (out.reward && out.reward.pointsAdded > 0) {
+      await createStudentNotification({
+        recipientStudentId: existing.studentId,
+        type: "REWARD_GRANTED",
+        title: "收到练习奖励",
+        content: `积分 +${out.reward.pointsAdded}，成长值 +${out.reward.xpAdded}。`,
+        payload: {
+          submissionId: out.updated.id,
+          exerciseSlug: existing.exerciseBank.slug,
+          reward: out.reward
+        }
+      })
+    }
+  } catch (e) {
+    console.error("failed to create exercise review notification", e)
+  }
 
   res.json({
     id: out.updated.id,

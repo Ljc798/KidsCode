@@ -7,6 +7,23 @@ const router = Router()
 
 // GET /leaderboard/:category?className=M1
 // category: daily, xp, games
+router.get("/classes", async (_req, res) => {
+  const rows = await prisma.student.findMany({
+    where: {
+      className: { not: null }
+    },
+    distinct: ["className"],
+    orderBy: { className: "asc" },
+    select: { className: true }
+  })
+
+  const classes = rows
+    .map(item => (item.className ?? "").trim().toUpperCase())
+    .filter(Boolean)
+
+  return res.json({ ok: true, classes })
+})
+
 router.get("/:category", async (req, res) => {
   const { category } = req.params
   const className = req.query.className as string | undefined

@@ -31,6 +31,11 @@ type LeaderboardResponse = {
   leaderboard: LeaderboardItem[]
 }
 
+type ClassesResponse = {
+  ok: true
+  classes: string[]
+}
+
 function categoryLabel(c: LeaderboardCategory) {
   if (c === "daily") return "今日积分"
   if (c === "xp") return "宠物等级"
@@ -43,29 +48,42 @@ function valueLabel(c: LeaderboardCategory) {
   return "关"
 }
 
-const CLASS_OPTIONS = ["C1", "C2", "C3", "C4", "S1", "S2", "S3", "S4"] as const
-
 export default function HomeLeaderboards() {
   const [category, setCategory] = useState<LeaderboardCategory>("daily")
-  const [className, setClassName] = useState<(typeof CLASS_OPTIONS)[number]>("C1")
+  const [classOptions, setClassOptions] = useState<string[]>(["C1", "C2", "C3", "C4", "S1", "S2", "S3", "S4"])
+  const [className, setClassName] = useState<string>("C1")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [items, setItems] = useState<LeaderboardItem[]>([])
 
   useEffect(() => {
     const run = async () => {
+      let classes: string[] = classOptions
       try {
-        const me = await apiFetch<MeResponse>("/auth/student/me")
-        if (me.ok) {
-          const fromMe = (me.student.className ?? "").trim().toUpperCase()
-          const normalized = CLASS_OPTIONS.find(c => c === fromMe)
-          if (normalized) setClassName(normalized)
+        const classesData = await apiFetch<ClassesResponse>("/leaderboard/classes")
+        if (classesData.ok && Array.isArray(classesData.classes) && classesData.classes.length > 0) {
+          classes = classesData.classes
+          setClassOptions(classesData.classes)
         }
       } catch {
         // ignore
       }
+      try {
+        const me = await apiFetch<MeResponse>("/auth/student/me")
+        if (me.ok) {
+          const fromMe = (me.student.className ?? "").trim().toUpperCase()
+          if (fromMe && classes.includes(fromMe)) {
+            setClassName(fromMe)
+            return
+          }
+        }
+      } catch {
+        // ignore
+      }
+      setClassName(current => (classes.includes(current) ? current : classes[0] ?? current))
     }
     run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const query = useMemo(
@@ -103,7 +121,7 @@ export default function HomeLeaderboards() {
 
         <div className="flex flex-wrap gap-2">
           <div className="flex overflow-hidden rounded-2xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-white/5">
-            {CLASS_OPTIONS.map(c => (
+            {classOptions.map(c => (
               <button
                 key={c}
                 type="button"

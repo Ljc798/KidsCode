@@ -79,10 +79,6 @@ export async function listThreads(actor: ChatActor) {
   const db = prisma as any
   if (actor.role === "STUDENT") {
     const thread = await ensureStudentThread(actor.studentId)
-    const student = await db.student.findUnique({
-      where: { id: actor.studentId },
-      select: { id: true, nickname: true, className: true }
-    })
     const unread = await db.chatMessage.count({
       where: {
         threadId: thread.id,
@@ -94,8 +90,8 @@ export async function listThreads(actor: ChatActor) {
       {
         id: thread.id,
         studentId: thread.studentId,
-        studentNickname: student?.nickname ?? "学生",
-        studentClassName: student?.className ?? null,
+        studentNickname: "老师",
+        studentClassName: null,
         lastMessageAt: thread.lastMessageAt?.toISOString() ?? null,
         lastMessagePreview: thread.lastMessagePreview ?? null,
         unreadCount: unread

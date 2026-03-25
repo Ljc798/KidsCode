@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
-import { useParams } from "next/navigation"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useParams, useSearchParams } from "next/navigation"
 import { apiFetch } from "@/app/lib/api"
 import CodeEditor from "@/app/exercises/CodeEditor"
 
@@ -172,7 +172,13 @@ function codingStatusLabel(status: "PENDING" | "REVIEWED") {
 
 export default function ExerciseDetailClient() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug
+  const querySubmissionId = searchParams.get("submissionId")
+  const queryMode = searchParams.get("mode")
+  const queryHighlight = searchParams.get("highlight")
+  const feedbackRef = useRef<HTMLDivElement | null>(null)
+  const feedbackTimerRef = useRef<number | null>(null)
   const [detail, setDetail] = useState<ExerciseDetail | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [codingAnswers, setCodingAnswers] = useState<Record<string, string>>({})
@@ -183,9 +189,10 @@ export default function ExerciseDetailClient() {
   const [submitResult, setSubmitResult] = useState<SubmissionResponse | null>(null)
   const [records, setRecords] = useState<SubmissionRecord[]>([])
   const [recordsLoading, setRecordsLoading] = useState(true)
-  const [mode, setMode] = useState<"solve" | "records">("solve")
+  const [mode, setMode] = useState<"solve" | "records">(queryMode === "records" ? "records" : "solve")
   const [activeRecordId, setActiveRecordId] = useState<string | null>(null)
   const [activeRecord, setActiveRecord] = useState<SubmissionDetail | null>(null)
+  const [feedbackHighlighted, setFeedbackHighlighted] = useState(false)
 
   useEffect(() => {
     const run = async () => {
@@ -199,7 +206,14 @@ export default function ExerciseDetailClient() {
         ])
         setDetail(exercise)
         setRecords(submissionRecords)
-        setActiveRecordId(submissionRecords[0]?.id ?? null)
+        const preferred =
+          querySubmissionId && submissionRecords.some(item => item.id === querySubmissionId)
+            ? querySubmissionId
+            : submissionRecords[0]?.id ?? null
+        setActiveRecordId(preferred)
+        if (queryMode === "records") {
+          setMode("records")
+        }
         setCurrentStepIndex(0)
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "加载失败")
@@ -210,7 +224,7 @@ export default function ExerciseDetailClient() {
     }
 
     run()
-  }, [slug])
+  }, [slug, queryMode, querySubmissionId])
 
   useEffect(() => {
     if (mode !== "records" || !activeRecordId) {
@@ -236,6 +250,14 @@ export default function ExerciseDetailClient() {
       ignore = true
     }
   }, [activeRecordId, mode, slug])
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimerRef.current) {
+        window.clearTimeout(feedbackTimerRef.current)
+      }
+    }
+  }, [])
 
   const exercise = mode === "records" && activeRecord ? activeRecord.exercise : detail
   const resultMap = new Map(
@@ -304,6 +326,20 @@ export default function ExerciseDetailClient() {
     isReviewMode && currentStep?.kind === "choice"
       ? readonlyChoiceFeedback[currentStep.question.id]
       : null
+
+  useEffect(() => {
+    const shouldHighlight = queryHighlight === "comment" && mode === "records"
+    const hasFeedback = Boolean(activeChoiceFeedback || activeTeacherFeedback)
+    if (!shouldHighlight || !hasFeedback) return
+    setFeedbackHighlighted(true)
+    feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    if (feedbackTimerRef.current) {
+      window.clearTimeout(feedbackTimerRef.current)
+    }
+    feedbackTimerRef.current = window.setTimeout(() => {
+      setFeedbackHighlighted(false)
+    }, 3500)
+  }, [queryHighlight, mode, activeChoiceFeedback, activeTeacherFeedback, currentStepIndex, activeRecordId])
 
   const choiceDone = exercise
     ? exercise.multipleChoice.filter(item => effectiveAnswers[item.id]).length
@@ -581,13 +617,27 @@ export default function ExerciseDetailClient() {
         )}
 
         {activeChoiceFeedback ? (
-          <div className="rounded-[1.4rem] border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-800 dark:text-amber-200">
+          <div
+            ref={feedbackRef}
+            className={`rounded-[1.4rem] border p-4 text-sm text-amber-800 transition dark:text-amber-200 ${
+              feedbackHighlighted
+                ? "border-amber-500/60 bg-amber-200/45 ring-2 ring-amber-400/50 dark:bg-amber-500/20"
+                : "border-amber-500/20 bg-amber-500/5"
+            }`}
+          >
             这道题老师点评：{activeChoiceFeedback}
           </div>
         ) : null}
 
         {currentStep.kind === "coding" && activeTeacherFeedback ? (
-          <div className="rounded-[1.4rem] border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-800 dark:text-amber-200">
+          <div
+            ref={activeChoiceFeedback ? undefined : feedbackRef}
+            className={`rounded-[1.4rem] border p-4 text-sm text-amber-800 transition dark:text-amber-200 ${
+              feedbackHighlighted
+                ? "border-amber-500/60 bg-amber-200/45 ring-2 ring-amber-400/50 dark:bg-amber-500/20"
+                : "border-amber-500/20 bg-amber-500/5"
+            }`}
+          >
             老师反馈：{activeTeacherFeedback}
           </div>
         ) : null}

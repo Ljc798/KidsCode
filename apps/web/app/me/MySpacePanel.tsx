@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { ChangeEvent } from "react"
+import { useSearchParams } from "next/navigation"
 import CodeEditor from "@/app/exercises/CodeEditor"
 
 type ProjectKind = "SCRATCH" | "OTHER" | "CPP"
@@ -94,6 +95,10 @@ function reviewStatusLabel(status?: "NONE" | "PENDING" | "REVIEWED") {
 }
 
 export default function MySpacePanel() {
+  const searchParams = useSearchParams()
+  const openByQueryOnceRef = useRef(false)
+  const commentRef = useRef<HTMLDivElement | null>(null)
+  const highlightTimerRef = useRef<number | null>(null)
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -122,6 +127,7 @@ export default function MySpacePanel() {
   const [editLocalFileName, setEditLocalFileName] = useState("")
   const [editMimeType, setEditMimeType] = useState("")
   const [editContent, setEditContent] = useState("")
+  const [commentHighlighted, setCommentHighlighted] = useState(false)
 
   const loadProjects = async () => {
     setLoading(true)
@@ -237,6 +243,37 @@ export default function MySpacePanel() {
       setDetailLoadingId(null)
     }
   }
+
+  useEffect(() => {
+    const projectId = searchParams.get("projectId")
+    if (!projectId || loading || openByQueryOnceRef.current) return
+    const matched = projects.find(item => item.id === projectId)
+    if (!matched) return
+    openByQueryOnceRef.current = true
+    if (matched.category) setActiveTab(matched.category)
+    openProject(matched)
+  }, [loading, projects, searchParams])
+
+  useEffect(() => {
+    const shouldHighlight = searchParams.get("highlight") === "comment"
+    if (!shouldHighlight || !activeProject || activeProject.category !== "CLASSROOM") return
+    setCommentHighlighted(true)
+    commentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    if (highlightTimerRef.current) {
+      window.clearTimeout(highlightTimerRef.current)
+    }
+    highlightTimerRef.current = window.setTimeout(() => {
+      setCommentHighlighted(false)
+    }, 3500)
+  }, [activeProject, searchParams])
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) {
+        window.clearTimeout(highlightTimerRef.current)
+      }
+    }
+  }, [])
 
   const filteredProjects = projects.filter(project => project.category === activeTab)
 
@@ -807,7 +844,14 @@ int main() {
             ) : null}
 
             {activeProject.category === "CLASSROOM" ? (
-              <div className="mt-5 rounded-[1.5rem] border border-emerald-500/15 bg-emerald-500/5 p-4 text-sm text-zinc-700 dark:text-zinc-200">
+              <div
+                ref={commentRef}
+                className={`mt-5 rounded-[1.5rem] border p-4 text-sm text-zinc-700 transition dark:text-zinc-200 ${
+                  commentHighlighted
+                    ? "border-emerald-500/50 bg-emerald-200/40 ring-2 ring-emerald-400/50 dark:bg-emerald-500/20"
+                    : "border-emerald-500/15 bg-emerald-500/5"
+                }`}
+              >
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
                     老师评语

@@ -3,6 +3,7 @@ import { prisma } from "@kidscode/database"
 import { requireAdmin } from "../middleware/requireAdmin"
 import { getSignedDownloadUrl } from "../lib/objectStorage"
 import { applyPetMeatReward, recoverPetEnergy } from "../lib/studentHelper"
+import { createStudentNotification } from "../lib/notification"
 
 const router = Router()
 
@@ -382,6 +383,44 @@ router.patch("/:id", async (req, res) => {
 
     return { updatedProject, rewardApplied }
   })
+
+  try {
+    await createStudentNotification({
+      recipientStudentId: existing.studentId,
+      type: "REVIEW_DONE",
+      title: "课堂作品已批改",
+      content: `《${existing.title}》已批改完成，请查看老师评语。`,
+      payload: {
+        projectId: existing.id,
+        projectTitle: existing.title,
+        reviewStatus: result.updatedProject.reviewStatus
+      }
+    })
+    await createStudentNotification({
+      recipientStudentId: existing.studentId,
+      type: "REVIEW_COMMENT",
+      title: "老师新增了评语",
+      content: teacherComment.slice(0, 120),
+      payload: {
+        projectId: existing.id
+      }
+    })
+
+    if (result.rewardApplied) {
+      await createStudentNotification({
+        recipientStudentId: existing.studentId,
+        type: "REWARD_GRANTED",
+        title: "收到课堂奖励",
+        content: `老师发放了奖励：${result.rewardApplied.type} +${result.rewardApplied.amount}。`,
+        payload: {
+          projectId: existing.id,
+          reward: result.rewardApplied
+        }
+      })
+    }
+  } catch (e) {
+    console.error("failed to create project review notification", e)
+  }
 
   res.json({
     ok: true,
