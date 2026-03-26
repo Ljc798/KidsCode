@@ -2,6 +2,7 @@ import { Router } from "express"
 import { prisma } from "@kidscode/database"
 import { requireStudent } from "../middleware/requireStudent"
 import { shanghaiDateKey } from "../lib/studentHelper"
+import { createAdminNotificationForAll } from "../lib/adminNotification"
 
 const router = Router()
 const EXERCISE_DAILY_POINTS_CAP = 200
@@ -559,6 +560,7 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
     where: { slug, isPublished: true },
     select: {
       id: true,
+      title: true,
       multipleChoice: true,
       codingTasks: true,
       codingTitle: true,
@@ -659,6 +661,8 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
       where: { id: studentId },
       select: {
         id: true,
+        nickname: true,
+        className: true,
         pointsBalance: true,
         petXp: true,
         exercisePointsDate: true,
@@ -729,6 +733,10 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
 
     return {
       submission,
+      student: {
+        nickname: student.nickname,
+        className: student.className
+      },
       reward: {
         pointsRequested: multipleChoicePoints,
         pointsAdded: pointReward.added,
@@ -744,6 +752,24 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
     }
   })
   if (!out) return res.status(401).json({ error: "student not found" })
+
+  try {
+    await createAdminNotificationForAll({
+      category: "EXERCISE",
+      title: "有学生提交了习题",
+      content: `${out.student.nickname}（${out.student.className ?? "未分班"}）提交了《${bank.title}》。`,
+      payload: {
+        studentId,
+        studentNickname: out.student.nickname,
+        className: out.student.className ?? null,
+        exerciseSlug: slug,
+        exerciseTitle: bank.title,
+        submissionId: out.submission.id
+      }
+    })
+  } catch (e) {
+    console.error("failed to create admin exercise submission notification", e)
+  }
 
   res.json({
     ok: true,

@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import TopNav from "@/app/components/TopNav"
 import StudentStatusCard from "@/app/me/StudentStatusCard"
 import MySpacePanel from "@/app/me/MySpacePanel"
@@ -18,7 +19,15 @@ export default function MePage() {
           </div>
 
           <div className="mt-6">
-            <MySpacePanel />
+            <Suspense
+              fallback={
+                <div className="rounded-3xl border border-dashed border-black/10 bg-white/50 px-5 py-8 text-sm text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+                  正在加载我的空间...
+                </div>
+              }
+            >
+              <MySpacePanel />
+            </Suspense>
           </div>
         </div>
       </main>

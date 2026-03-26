@@ -1,7 +1,7 @@
 "use client"
 
 import { createPortal } from "react-dom"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch } from "@/app/lib/api"
 
 type ReviewListItem = {
@@ -151,6 +151,7 @@ function formatDateTimeToMinute(value: string) {
 const PAGE_SIZE = 10
 
 export default function AdminReviewsPage() {
+  const queryAppliedRef = useRef(false)
   const [items, setItems] = useState<ReviewListItem[]>([])
   const [students, setStudents] = useState<ReviewListResponse["filters"]["students"]>([])
   const [level, setLevel] = useState("all")
@@ -168,6 +169,21 @@ export default function AdminReviewsPage() {
   const [saving, setSaving] = useState(false)
   const [portalReady, setPortalReady] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+
+  useEffect(() => {
+    if (queryAppliedRef.current) return
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    const qLevel = params.get("level")
+    const qStudentId = params.get("studentId")
+    const qStatus = params.get("codingStatus")
+    const qReviewId = params.get("reviewId")
+    if (qLevel) setLevel(qLevel)
+    if (qStudentId) setStudentId(qStudentId)
+    if (qStatus) setStatus(qStatus)
+    if (qReviewId) setActiveId(qReviewId)
+    queryAppliedRef.current = true
+  }, [])
 
   useEffect(() => {
     setPortalReady(true)
@@ -211,6 +227,14 @@ export default function AdminReviewsPage() {
     () => items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
     [currentPage, items]
   )
+
+  useEffect(() => {
+    if (!activeId || items.length === 0) return
+    const index = items.findIndex(item => item.id === activeId)
+    if (index < 0) return
+    const targetPage = Math.floor(index / PAGE_SIZE) + 1
+    if (targetPage !== currentPage) setCurrentPage(targetPage)
+  }, [activeId, items, currentPage])
 
   useEffect(() => {
     if (!activeId) {
@@ -400,7 +424,12 @@ export default function AdminReviewsPage() {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveId(item.id)}
-                className="grid w-full grid-cols-12 items-center gap-2 px-4 py-3 text-left hover:bg-zinc-50/80 dark:hover:bg-white/5"
+                className={[
+                  "grid w-full grid-cols-12 items-center gap-2 px-4 py-3 text-left",
+                  item.id === activeId
+                    ? "bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/30"
+                    : "hover:bg-zinc-50/80 dark:hover:bg-white/5"
+                ].join(" ")}
               >
                 <div className="col-span-3 min-w-0">
                   <div className="truncate font-medium text-zinc-950 dark:text-white">

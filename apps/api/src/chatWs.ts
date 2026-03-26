@@ -9,6 +9,7 @@ import {
   type ChatActor
 } from "./lib/chat"
 import type { NotificationDTO } from "./lib/notification"
+import type { AdminNotificationDTO } from "./lib/adminNotification"
 
 type ChatWsState = {
   actor: ChatActor
@@ -19,6 +20,7 @@ type WsWithState = WebSocket & { __chatState?: ChatWsState }
 
 const threadSockets = new Map<string, Set<WsWithState>>()
 const studentSockets = new Map<string, Set<WsWithState>>()
+const adminSockets = new Map<string, Set<WsWithState>>()
 
 function safeSend(ws: WebSocket, payload: unknown) {
   if (ws.readyState !== WebSocket.OPEN) return
@@ -64,6 +66,15 @@ function joinStudent(ws: WsWithState, studentId: string) {
   set.add(ws)
 }
 
+function joinAdmin(ws: WsWithState, adminUserId: string) {
+  let set = adminSockets.get(adminUserId)
+  if (!set) {
+    set = new Set()
+    adminSockets.set(adminUserId, set)
+  }
+  set.add(ws)
+}
+
 function leaveStudent(ws: WsWithState) {
   if (!ws.__chatState || ws.__chatState.actor.role !== "STUDENT") return
   const studentId = ws.__chatState.actor.studentId
@@ -71,6 +82,15 @@ function leaveStudent(ws: WsWithState) {
   if (!set) return
   set.delete(ws)
   if (set.size === 0) studentSockets.delete(studentId)
+}
+
+function leaveAdmin(ws: WsWithState) {
+  if (!ws.__chatState || ws.__chatState.actor.role !== "ADMIN") return
+  const adminUserId = ws.__chatState.actor.adminUserId
+  const set = adminSockets.get(adminUserId)
+  if (!set) return
+  set.delete(ws)
+  if (set.size === 0) adminSockets.delete(adminUserId)
 }
 
 function broadcastThread(threadId: string, payload: unknown) {
@@ -93,6 +113,21 @@ export function emitStudentNotification(
       safeSend(ws, { type: "notification", notification })
     }
     safeSend(ws, { type: "notification_unread_count", unreadCount })
+  }
+}
+
+export function emitAdminNotification(
+  adminUserId: string,
+  notification: AdminNotificationDTO | null,
+  unreadCount: number
+) {
+  const set = adminSockets.get(adminUserId)
+  if (!set) return
+  for (const ws of set) {
+    if (notification) {
+      safeSend(ws, { type: "admin_notification", notification })
+    }
+    safeSend(ws, { type: "admin_notification_unread_count", unreadCount })
   }
 }
 
@@ -119,6 +154,18 @@ export function attachChatWs(server: HttpServer) {
             where: { recipientStudentId: actor.studentId, isRead: false }
           })
           safeSend(ws, { type: "notification_unread_count", unreadCount })
+        } catch {
+          // ignore
+        }
+      })()
+    } else {
+      joinAdmin(ws, actor.adminUserId)
+      ;(async () => {
+        try {
+          const unreadCount = await (prisma as any).adminNotification.count({
+            where: { recipientAdminUserId: actor.adminUserId, isRead: false }
+          })
+          safeSend(ws, { type: "admin_notification_unread_count", unreadCount })
         } catch {
           // ignore
         }
@@ -186,6 +233,7 @@ export function attachChatWs(server: HttpServer) {
     ws.on("close", () => {
       leaveCurrent(ws)
       leaveStudent(ws)
+      leaveAdmin(ws)
     })
   })
 

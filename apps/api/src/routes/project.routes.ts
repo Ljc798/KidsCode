@@ -6,6 +6,7 @@ import {
   getSignedDownloadUrl,
   uploadObject
 } from "../lib/objectStorage"
+import { createAdminNotificationForAll } from "../lib/adminNotification"
 
 const router = Router()
 
@@ -397,6 +398,25 @@ router.post("/", async (req: any, res) => {
             }
           })
         })()
+
+  if (created.category === "CLASSROOM") {
+    try {
+      await createAdminNotificationForAll({
+        category: "CLASSROOM_PROJECT",
+        title: "有学生提交了课堂创作",
+        content: `${uploaderName}（课堂创作）提交了《${created.title}》。`,
+        payload: {
+          projectId: created.id,
+          studentId,
+          studentNickname: uploaderName,
+          weekNumber: created.weekNumber ?? null,
+          title: created.title
+        }
+      })
+    } catch (e) {
+      console.error("failed to create admin classroom project notification", e)
+    }
+  }
 
   res.json({
     ok: true,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch } from "@/app/lib/api"
 
 type ReviewListItem = {
@@ -69,6 +69,7 @@ function formatDateTimeToMinute(value: string) {
 const PAGE_SIZE = 8
 
 export default function AdminProjectReviewsPage() {
+  const queryAppliedRef = useRef(false)
   const [items, setItems] = useState<ReviewListItem[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ReviewDetail | null>(null)
@@ -82,6 +83,21 @@ export default function AdminProjectReviewsPage() {
   const [rewardAmount, setRewardAmount] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+
+  useEffect(() => {
+    if (queryAppliedRef.current) return
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    const qWeek = params.get("weekNumber")
+    const qKind = params.get("kind")
+    const qReviewStatus = params.get("reviewStatus")
+    const qProjectId = params.get("projectId")
+    if (qWeek) setWeekNumber(qWeek)
+    if (qKind) setKind(qKind)
+    if (qReviewStatus) setReviewStatus(qReviewStatus)
+    if (qProjectId) setActiveId(qProjectId)
+    queryAppliedRef.current = true
+  }, [])
 
   const load = async () => {
     setLoading(true)
@@ -116,6 +132,14 @@ export default function AdminProjectReviewsPage() {
     () => items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
     [currentPage, items]
   )
+
+  useEffect(() => {
+    if (!activeId || items.length === 0) return
+    const index = items.findIndex(item => item.id === activeId)
+    if (index < 0) return
+    const targetPage = Math.floor(index / PAGE_SIZE) + 1
+    if (targetPage !== currentPage) setCurrentPage(targetPage)
+  }, [activeId, items, currentPage])
 
   useEffect(() => {
     if (!activeId) {
@@ -240,7 +264,12 @@ export default function AdminProjectReviewsPage() {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveId(item.id)}
-                  className="w-full px-4 py-4 text-left hover:bg-zinc-50/80 dark:hover:bg-white/5"
+                  className={[
+                    "w-full px-4 py-4 text-left",
+                    item.id === activeId
+                      ? "bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/30"
+                      : "hover:bg-zinc-50/80 dark:hover:bg-white/5"
+                  ].join(" ")}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="truncate font-semibold text-zinc-950 dark:text-white">

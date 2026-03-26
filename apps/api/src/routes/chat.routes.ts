@@ -15,6 +15,12 @@ import {
   markAllStudentNotificationsRead,
   markStudentNotificationRead
 } from "../lib/notification"
+import {
+  getAdminNotificationUnreadCount,
+  listAdminNotifications,
+  markAdminNotificationRead,
+  markAllAdminNotificationsRead
+} from "../lib/adminNotification"
 
 const router = Router()
 
@@ -180,6 +186,44 @@ router.post("/admin/notifications", async (req: any, res) => {
   })
 
   return res.json({ ok: true, sentCount })
+})
+
+router.get("/admin/inbox", async (req: any, res) => {
+  const actor = getActor(req, res)
+  if (!actor) return
+  if (actor.role !== "ADMIN") return res.status(403).json({ error: "forbidden" })
+  const limitRaw = Number(req.query?.limit ?? 80)
+  const limit = Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 80
+  const categoryRaw = typeof req.query?.category === "string" ? req.query.category.trim().toUpperCase() : ""
+  const category = categoryRaw === "EXERCISE" || categoryRaw === "CLASSROOM_PROJECT" ? categoryRaw : undefined
+  const notifications = await listAdminNotifications(actor.adminUserId, { limit, category })
+  return res.json({ ok: true, notifications })
+})
+
+router.get("/admin/inbox/unread-count", async (req: any, res) => {
+  const actor = getActor(req, res)
+  if (!actor) return
+  if (actor.role !== "ADMIN") return res.status(403).json({ error: "forbidden" })
+  const unreadCount = await getAdminNotificationUnreadCount(actor.adminUserId)
+  return res.json({ ok: true, unreadCount })
+})
+
+router.post("/admin/inbox/:id/read", async (req: any, res) => {
+  const actor = getActor(req, res)
+  if (!actor) return
+  if (actor.role !== "ADMIN") return res.status(403).json({ error: "forbidden" })
+  const id = typeof req.params?.id === "string" ? req.params.id.trim() : ""
+  if (!id) return res.status(400).json({ error: "invalid notification id" })
+  await markAdminNotificationRead(actor.adminUserId, id)
+  return res.json({ ok: true })
+})
+
+router.post("/admin/inbox/read-all", async (req: any, res) => {
+  const actor = getActor(req, res)
+  if (!actor) return
+  if (actor.role !== "ADMIN") return res.status(403).json({ error: "forbidden" })
+  await markAllAdminNotificationsRead(actor.adminUserId)
+  return res.json({ ok: true })
 })
 
 export default router

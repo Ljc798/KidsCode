@@ -47,7 +47,23 @@ type NotificationItem = {
   createdAt: string
 }
 
-type LeftMode = "threads" | "students" | "notifications" | "broadcast"
+type AdminNotificationItem = {
+  id: string
+  category: "EXERCISE" | "CLASSROOM_PROJECT"
+  title: string
+  content: string
+  payload: unknown
+  isRead: boolean
+  readAt: string | null
+  createdAt: string
+}
+
+type LeftMode =
+  | "threads"
+  | "students"
+  | "notifications"
+  | "broadcast"
+  | "adminInbox"
 
 function buildWsUrl() {
   const explicit = process.env.NEXT_PUBLIC_CHAT_WS_URL
@@ -105,10 +121,16 @@ export default function ChatWidget() {
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loadingStudents, setLoadingStudents] = useState(false)
   const [loadingNotifications, setLoadingNotifications] = useState(false)
+  const [loadingAdminInbox, setLoadingAdminInbox] = useState(false)
   const [studentsLoaded, setStudentsLoaded] = useState(false)
   const [notificationsLoaded, setNotificationsLoaded] = useState(false)
+  const [adminInboxLoaded, setAdminInboxLoaded] = useState(false)
   const [students, setStudents] = useState<StudentItem[]>([])
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [adminInbox, setAdminInbox] = useState<AdminNotificationItem[]>([])
+  const [activeNotificationId, setActiveNotificationId] = useState<string | null>(null)
+  const [activeAdminNotificationId, setActiveAdminNotificationId] = useState<string | null>(null)
+  const [adminInboxCategory, setAdminInboxCategory] = useState<"ALL" | "EXERCISE" | "CLASSROOM_PROJECT">("ALL")
   const [leftMode, setLeftMode] = useState<LeftMode>("threads")
   const [broadcastTargetType, setBroadcastTargetType] = useState<"ALL" | "CLASS" | "STUDENT">("ALL")
   const [broadcastClassName, setBroadcastClassName] = useState("")
@@ -118,8 +140,10 @@ export default function ChatWidget() {
   const [broadcastSending, setBroadcastSending] = useState(false)
   const [broadcastResult, setBroadcastResult] = useState<string | null>(null)
   const [wsRetry, setWsRetry] = useState(0)
+  const [wsDown, setWsDown] = useState(false)
   const [launcherAlert, setLauncherAlert] = useState(false)
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0)
+  const [adminNotificationUnreadCount, setAdminNotificationUnreadCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -132,16 +156,24 @@ export default function ChatWidget() {
     () => threads.find(t => t.id === activeThreadId) ?? null,
     [activeThreadId, threads]
   )
+  const activeNotification = useMemo(
+    () => notifications.find(item => item.id === activeNotificationId) ?? null,
+    [activeNotificationId, notifications]
+  )
+  const activeAdminNotification = useMemo(
+    () => adminInbox.find(item => item.id === activeAdminNotificationId) ?? null,
+    [activeAdminNotificationId, adminInbox]
+  )
 
   const chatUnread = useMemo(
     () => threads.reduce((sum, thread) => sum + thread.unreadCount, 0),
     [threads]
   )
 
-  const totalUnread = useMemo(
-    () => chatUnread + notificationUnreadCount,
-    [chatUnread, notificationUnreadCount]
-  )
+  const totalUnread = useMemo(() => {
+    if (actor?.role === "ADMIN") return chatUnread + adminNotificationUnreadCount
+    return chatUnread + notificationUnreadCount
+  }, [actor, chatUnread, notificationUnreadCount, adminNotificationUnreadCount])
 
   const studentsByClass = useMemo(() => {
     const map = new Map<string, StudentItem[]>()
@@ -294,6 +326,34 @@ export default function ChatWidget() {
   }, [open, actor, leftMode, notificationsLoaded])
 
   useEffect(() => {
+    if (leftMode !== "notifications") return
+    if (!activeNotificationId && notifications.length > 0) {
+      setActiveNotificationId(notifications[0]!.id)
+    } else if (
+      activeNotificationId &&
+      !notifications.some(item => item.id === activeNotificationId)
+    ) {
+      setActiveNotificationId(notifications[0]?.id ?? null)
+    }
+  }, [leftMode, notifications, activeNotificationId])
+
+  useEffect(() => {
+    if (leftMode !== "adminInbox") return
+    if (!activeAdminNotificationId && adminInbox.length > 0) {
+      setActiveAdminNotificationId(adminInbox[0]!.id)
+    } else if (
+      activeAdminNotificationId &&
+      !adminInbox.some(item => item.id === activeAdminNotificationId)
+    ) {
+      setActiveAdminNotificationId(adminInbox[0]?.id ?? null)
+    }
+  }, [leftMode, adminInbox, activeAdminNotificationId])
+
+  useEffect(() => {
+    setAdminInboxLoaded(false)
+  }, [adminInboxCategory])
+
+  useEffect(() => {
     if (!actor || actor.role !== "STUDENT") return
     let cancelled = false
     const run = async () => {
@@ -315,7 +375,54 @@ export default function ChatWidget() {
   }, [actor])
 
   useEffect(() => {
-    if (!open || !activeThreadId) return
+    if (!open || actor?.role !== "ADMIN" || leftMode !== "adminInbox" || adminInboxLoaded) return
+    let cancelled = false
+    const run = async () => {
+      setLoadingAdminInbox(true)
+      try {
+        const categoryQuery =
+          adminInboxCategory === "ALL" ? "" : `&category=${encodeURIComponent(adminInboxCategory)}`
+        const data = await apiFetch<{ ok: true; notifications: AdminNotificationItem[] }>(
+          `/chat/admin/inbox?limit=80${categoryQuery}`
+        )
+        if (cancelled) return
+        setAdminInbox(data.notifications)
+        setAdminInboxLoaded(true)
+      } catch (e: unknown) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "加载老师通知失败")
+      } finally {
+        if (!cancelled) setLoadingAdminInbox(false)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [open, actor, leftMode, adminInboxLoaded, adminInboxCategory])
+
+  useEffect(() => {
+    if (!actor || actor.role !== "ADMIN") return
+    let cancelled = false
+    const run = async () => {
+      try {
+        const data = await apiFetch<{ ok: true; unreadCount: number }>(
+          "/chat/admin/inbox/unread-count"
+        )
+        if (!cancelled) setAdminNotificationUnreadCount(data.unreadCount)
+      } catch {
+        // ignore
+      }
+    }
+    run()
+    const timer = window.setInterval(run, 15000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [actor])
+
+  useEffect(() => {
+    if (!open || !activeThreadId || leftMode !== "threads") return
     let cancelled = false
     const run = async () => {
       setLoadingMessages(true)
@@ -340,7 +447,7 @@ export default function ChatWidget() {
     return () => {
       cancelled = true
     }
-  }, [open, activeThreadId])
+  }, [open, activeThreadId, leftMode])
 
   useEffect(() => {
     if (!open || !actor) return
@@ -349,9 +456,7 @@ export default function ChatWidget() {
     wsRef.current = ws
 
     ws.onopen = () => {
-      setError(current =>
-        current?.includes("聊天连接异常") ? null : current
-      )
+      setWsDown(false)
       if (heartbeatRef.current) window.clearInterval(heartbeatRef.current)
       heartbeatRef.current = window.setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -410,13 +515,26 @@ export default function ChatWidget() {
         if (Number.isFinite(count)) setNotificationUnreadCount(Math.max(0, Math.floor(count)))
         return
       }
+
+      if (data?.type === "admin_notification" && data?.notification) {
+        const incoming = data.notification as AdminNotificationItem
+        setAdminInbox(current => [incoming, ...current.filter(item => item.id !== incoming.id)])
+        return
+      }
+
+      if (data?.type === "admin_notification_unread_count") {
+        const count = Number(data.unreadCount)
+        if (Number.isFinite(count)) setAdminNotificationUnreadCount(Math.max(0, Math.floor(count)))
+        return
+      }
     }
 
     ws.onerror = () => {
-      setError("聊天连接异常，正在尝试恢复。")
+      setWsDown(true)
     }
 
     ws.onclose = () => {
+      setWsDown(true)
       if (heartbeatRef.current) {
         window.clearInterval(heartbeatRef.current)
         heartbeatRef.current = null
@@ -443,6 +561,28 @@ export default function ChatWidget() {
       wsRef.current = null
     }
   }, [open, actor, activeThreadId, wsRetry])
+
+  useEffect(() => {
+    if (!open || !activeThreadId || !wsDown) return
+    let cancelled = false
+    const run = async () => {
+      try {
+        const data = await apiFetch<{ ok: true; messages: ChatMessage[] }>(
+          `/chat/threads/${activeThreadId}/messages?limit=80`
+        )
+        if (cancelled) return
+        setMessages(data.messages)
+      } catch {
+        // ignore polling failures
+      }
+    }
+    run()
+    const timer = window.setInterval(run, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [open, activeThreadId, wsDown])
 
   useEffect(() => {
     const el = listRef.current
@@ -537,12 +677,45 @@ export default function ChatWidget() {
     return ""
   }
 
+  const resolveAdminNotificationUrl = (item: AdminNotificationItem) => {
+    const payload = (item.payload ?? {}) as Record<string, unknown>
+    if (item.category === "EXERCISE") {
+      const query = new URLSearchParams()
+      const studentId = typeof payload.studentId === "string" ? payload.studentId : ""
+      const submissionId = typeof payload.submissionId === "string" ? payload.submissionId : ""
+      if (studentId) query.set("studentId", studentId)
+      query.set("codingStatus", "PENDING")
+      if (submissionId) query.set("reviewId", submissionId)
+      return `/admin/reviews?${query.toString()}`
+    }
+    const query = new URLSearchParams()
+    query.set("reviewStatus", "PENDING")
+    const projectId = typeof payload.projectId === "string" ? payload.projectId : ""
+    if (projectId) query.set("projectId", projectId)
+    return `/admin/projects?${query.toString()}`
+  }
+
   const onNotificationClick = async (item: NotificationItem) => {
+    setActiveNotificationId(item.id)
     if (!item.isRead) {
       await markNotificationRead(item.id)
     }
+  }
+
+  const openNotificationTarget = (item: NotificationItem | null) => {
+    if (!item) return
     const url = resolveNotificationUrl(item)
     if (!url) return
+    setOpen(false)
+    router.push(url)
+  }
+
+  const openAdminNotificationTarget = (item: AdminNotificationItem | null) => {
+    if (!item) return
+    if (!item.isRead) {
+      void markAdminNotificationRead(item.id)
+    }
+    const url = resolveAdminNotificationUrl(item)
     setOpen(false)
     router.push(url)
   }
@@ -556,6 +729,34 @@ export default function ChatWidget() {
     setNotificationUnreadCount(0)
     try {
       await apiFetch("/chat/notifications/read-all", { method: "POST" })
+    } catch {
+      // ignore
+    }
+  }
+
+  const markAdminNotificationRead = async (id: string) => {
+    setAdminInbox(current =>
+      current.map(item =>
+        item.id === id ? { ...item, isRead: true, readAt: item.readAt ?? new Date().toISOString() } : item
+      )
+    )
+    setAdminNotificationUnreadCount(current => Math.max(0, current - 1))
+    try {
+      await apiFetch(`/chat/admin/inbox/${id}/read`, { method: "POST" })
+    } catch {
+      // ignore
+    }
+  }
+
+  const markAllAdminNotificationsRead = async () => {
+    setAdminInbox(current =>
+      current.map(item =>
+        item.isRead ? item : { ...item, isRead: true, readAt: new Date().toISOString() }
+      )
+    )
+    setAdminNotificationUnreadCount(0)
+    try {
+      await apiFetch("/chat/admin/inbox/read-all", { method: "POST" })
     } catch {
       // ignore
     }
@@ -703,6 +904,25 @@ export default function ChatWidget() {
                   {actor.role === "ADMIN" ? (
                     <button
                       type="button"
+                      onClick={() => setLeftMode("adminInbox")}
+                      className={`relative inline-flex h-11 items-center justify-center rounded-xl border text-lg ${
+                        leftMode === "adminInbox"
+                          ? "border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950"
+                          : "border-black/10 bg-white text-zinc-700 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200"
+                      }`}
+                      title="提交通知"
+                    >
+                      🧾
+                      {adminNotificationUnreadCount > 0 ? (
+                        <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                          {adminNotificationUnreadCount > 99 ? "99+" : adminNotificationUnreadCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  ) : null}
+                  {actor.role === "ADMIN" ? (
+                    <button
+                      type="button"
                       onClick={() => setLeftMode("students")}
                       className={`inline-flex h-11 items-center justify-center rounded-xl border text-lg ${
                         leftMode === "students"
@@ -737,6 +957,8 @@ export default function ChatWidget() {
                     ? "学生列表（按班级）"
                     : leftMode === "notifications"
                       ? "消息通知"
+                      : leftMode === "adminInbox"
+                        ? "提交通知"
                       : leftMode === "broadcast"
                         ? "消息推送"
                       : actor.role === "ADMIN"
@@ -744,7 +966,61 @@ export default function ChatWidget() {
                         : "联系老师"}
                 </div>
                 <div className="h-[calc(78vh-110px)] overflow-y-auto">
-                  {leftMode === "broadcast" && actor.role === "ADMIN" ? (
+                  {leftMode === "adminInbox" && actor.role === "ADMIN" ? (
+                    <div className="space-y-2 p-3">
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={adminInboxCategory}
+                          onChange={e =>
+                            setAdminInboxCategory(
+                              e.target.value as "ALL" | "EXERCISE" | "CLASSROOM_PROJECT"
+                            )
+                          }
+                          className="h-8 w-full rounded-lg border border-black/10 px-2 text-xs dark:border-white/10 dark:bg-zinc-900"
+                        >
+                          <option value="ALL">全部类型</option>
+                          <option value="EXERCISE">习题提交</option>
+                          <option value="CLASSROOM_PROJECT">课堂创作提交</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={markAllAdminNotificationsRead}
+                          className="shrink-0 rounded-lg border border-black/10 px-2 py-1 text-[11px] text-zinc-600 dark:border-white/10 dark:text-zinc-300"
+                        >
+                          全部已读
+                        </button>
+                      </div>
+                      {loadingAdminInbox ? (
+                        <div className="px-1 py-2 text-xs text-zinc-500 dark:text-zinc-400">加载中...</div>
+                      ) : adminInbox.length === 0 ? (
+                        <div className="px-1 py-2 text-xs text-zinc-500 dark:text-zinc-400">暂无提交通知</div>
+                      ) : (
+                        adminInbox.map(item => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveAdminNotificationId(item.id)
+                              if (!item.isRead) void markAdminNotificationRead(item.id)
+                            }}
+                            className={`w-full rounded-xl border px-3 py-2 text-left text-xs ${
+                              item.id === activeAdminNotificationId
+                                ? "border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950"
+                                : item.isRead
+                                  ? "border-black/10 text-zinc-700 dark:border-white/10 dark:text-zinc-200"
+                                  : "border-amber-300 bg-amber-50 text-zinc-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-white"
+                            }`}
+                          >
+                            <div className="font-semibold">{item.title}</div>
+                            <div className="mt-1">
+                              {item.category === "EXERCISE" ? "习题提交" : "课堂创作提交"}
+                            </div>
+                            <div className="mt-1 line-clamp-1 opacity-80">{item.content}</div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  ) : leftMode === "broadcast" && actor.role === "ADMIN" ? (
                     <div className="space-y-3 p-3">
                       <div>
                         <div className="mb-1 text-xs text-zinc-500 dark:text-zinc-400">推送对象</div>
@@ -886,9 +1162,11 @@ export default function ChatWidget() {
                             type="button"
                             onClick={() => onNotificationClick(item)}
                             className={`w-full rounded-xl border px-3 py-2 text-left text-xs ${
-                              item.isRead
-                                ? "border-black/10 text-zinc-600 dark:border-white/10 dark:text-zinc-300"
-                                : "border-rose-300 bg-rose-50 text-zinc-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-white"
+                              item.id === activeNotificationId
+                                ? "border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950"
+                                : item.isRead
+                                  ? "border-black/10 text-zinc-600 dark:border-white/10 dark:text-zinc-300"
+                                  : "border-rose-300 bg-rose-50 text-zinc-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-white"
                             }`}
                           >
                             <div className="font-semibold">{item.title}</div>
@@ -929,83 +1207,152 @@ export default function ChatWidget() {
                 </div>
               </aside>
 
-              <div className="grid min-h-0 grid-rows-[1fr_auto]">
-                <div ref={listRef} className="overflow-y-auto px-4 py-3">
-                  {loadingMessages ? (
-                    <div className="text-sm text-zinc-500 dark:text-zinc-400">加载消息中...</div>
-                  ) : messages.length === 0 ? (
-                    <div className="text-sm text-zinc-500 dark:text-zinc-400">先发一条消息吧。</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {messages.map(msg => {
-                        const mine =
-                          (actor.role === "STUDENT" && msg.senderRole === "STUDENT") ||
-                          (actor.role === "ADMIN" && msg.senderRole === "ADMIN")
-                        return (
-                          <div key={msg.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                            <div
-                              className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                                mine
-                                  ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
-                                  : "border border-black/10 bg-zinc-50 text-zinc-800 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-100"
-                              }`}
-                            >
-                              <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+              {leftMode === "threads" ? (
+                <div className="grid min-h-0 grid-rows-[1fr_auto]">
+                  <div ref={listRef} className="overflow-y-auto px-4 py-3">
+                    {loadingMessages ? (
+                      <div className="text-sm text-zinc-500 dark:text-zinc-400">加载消息中...</div>
+                    ) : messages.length === 0 ? (
+                      <div className="text-sm text-zinc-500 dark:text-zinc-400">先发一条消息吧。</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {messages.map(msg => {
+                          const mine =
+                            (actor.role === "STUDENT" && msg.senderRole === "STUDENT") ||
+                            (actor.role === "ADMIN" && msg.senderRole === "ADMIN")
+                          return (
+                            <div key={msg.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                               <div
-                                className={`mt-1 text-[10px] ${
+                                className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
                                   mine
-                                    ? "text-white/70 dark:text-zinc-600"
-                                    : "text-zinc-500 dark:text-zinc-400"
+                                    ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                                    : "border border-black/10 bg-zinc-50 text-zinc-800 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-100"
                                 }`}
                               >
-                                {fmtTime(msg.createdAt)}
-                                {mine ? (
-                                  <span className="ml-2">
-                                    {actor.role === "STUDENT"
-                                      ? msg.readByAdminAt
-                                        ? "已读"
-                                        : "未读"
-                                      : msg.readByStudentAt
-                                        ? "已读"
-                                        : "未读"}
-                                  </span>
-                                ) : null}
+                                <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                                <div
+                                  className={`mt-1 text-[10px] ${
+                                    mine
+                                      ? "text-white/70 dark:text-zinc-600"
+                                      : "text-zinc-500 dark:text-zinc-400"
+                                  }`}
+                                >
+                                  {fmtTime(msg.createdAt)}
+                                  {mine ? (
+                                    <span className="ml-2">
+                                      {actor.role === "STUDENT"
+                                        ? msg.readByAdminAt
+                                          ? "已读"
+                                          : "未读"
+                                        : msg.readByStudentAt
+                                          ? "已读"
+                                          : "未读"}
+                                    </span>
+                                  ) : null}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )
-                      })}
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-black/10 px-4 py-3 dark:border-white/10">
+                    {error ? <div className="mb-2 text-xs text-red-600 dark:text-red-300">{error}</div> : null}
+                    {wsDown ? (
+                      <div className="mb-2 text-xs text-amber-600 dark:text-amber-300">
+                        聊天实时连接不可用，已切换为轮询刷新。
+                      </div>
+                    ) : null}
+                    <div className="flex items-end gap-2">
+                      <textarea
+                        value={text}
+                        onChange={e => setText(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault()
+                            sendMessage()
+                          }
+                        }}
+                        placeholder="输入消息，Enter发送，Shift+Enter换行"
+                        rows={2}
+                        className="min-h-10 w-full min-w-0 resize-y rounded-xl border border-black/10 px-3 py-2 text-sm outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/60"
+                      />
+                      <button
+                        type="button"
+                        onClick={sendMessage}
+                        disabled={!activeThreadId || sending || !text.trim()}
+                        className="h-10 min-w-[72px] shrink-0 whitespace-nowrap rounded-xl bg-zinc-950 px-4 text-sm font-bold text-white [text-orientation:mixed] [writing-mode:horizontal-tb] disabled:opacity-40 dark:bg-white dark:text-zinc-950"
+                      >
+                        发送
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : leftMode === "notifications" && actor.role === "STUDENT" ? (
+                <div className="min-h-0 overflow-y-auto px-5 py-4">
+                  {!activeNotification ? (
+                    <div className="text-sm text-zinc-500 dark:text-zinc-400">请选择左侧一条通知查看详情。</div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div>
+                        <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                          {activeNotification.title}
+                        </div>
+                        <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                          {fmtTime(activeNotification.createdAt)} · {activeNotification.isRead ? "已读" : "未读"}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-black/10 bg-zinc-50 p-4 text-sm whitespace-pre-wrap break-words text-zinc-800 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-200">
+                        {activeNotification.content}
+                      </div>
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => openNotificationTarget(activeNotification)}
+                          className="rounded-xl bg-zinc-950 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-zinc-950"
+                        >
+                          前往详情
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
-
-                <div className="border-t border-black/10 px-4 py-3 dark:border-white/10">
-                  {error ? <div className="mb-2 text-xs text-red-600 dark:text-red-300">{error}</div> : null}
-                  <div className="flex items-end gap-2">
-                    <textarea
-                      value={text}
-                      onChange={e => setText(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault()
-                          sendMessage()
-                        }
-                      }}
-                      placeholder="输入消息，Enter发送，Shift+Enter换行"
-                      rows={2}
-                      className="min-h-10 w-full min-w-0 resize-y rounded-xl border border-black/10 px-3 py-2 text-sm outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/60"
-                    />
-                    <button
-                      type="button"
-                      onClick={sendMessage}
-                      disabled={!activeThreadId || sending || !text.trim()}
-                      className="h-10 min-w-[72px] shrink-0 whitespace-nowrap rounded-xl bg-zinc-950 px-4 text-sm font-bold text-white [text-orientation:mixed] [writing-mode:horizontal-tb] disabled:opacity-40 dark:bg-white dark:text-zinc-950"
-                    >
-                      发送
-                    </button>
-                  </div>
+              ) : leftMode === "adminInbox" && actor.role === "ADMIN" ? (
+                <div className="min-h-0 overflow-y-auto px-5 py-4">
+                  {!activeAdminNotification ? (
+                    <div className="text-sm text-zinc-500 dark:text-zinc-400">请选择左侧一条提交通知查看详情。</div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div>
+                        <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                          {activeAdminNotification.title}
+                        </div>
+                        <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                          {activeAdminNotification.category === "EXERCISE" ? "习题提交" : "课堂创作提交"} · {fmtTime(activeAdminNotification.createdAt)} · {activeAdminNotification.isRead ? "已读" : "未读"}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-black/10 bg-zinc-50 p-4 text-sm whitespace-pre-wrap break-words text-zinc-800 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-200">
+                        {activeAdminNotification.content}
+                      </div>
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => openAdminNotificationTarget(activeAdminNotification)}
+                          className="rounded-xl bg-zinc-950 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-zinc-950"
+                        >
+                          去批改
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              ) : (
+                <div className="min-h-0 overflow-y-auto px-5 py-4 text-sm text-zinc-500 dark:text-zinc-400">
+                  请在左侧选择一个会话或功能。
+                </div>
+              )}
             </div>
           </div>
         </div>
