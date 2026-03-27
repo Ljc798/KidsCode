@@ -8,6 +8,14 @@ import {
   getSignedDownloadUrl,
   uploadObject
 } from "../lib/objectStorage"
+import {
+  getTokenFromRequest as getStudentTokenFromRequest,
+  verifyStudentToken
+} from "../lib/studentToken"
+import {
+  getTokenFromRequest as getAdminTokenFromRequest,
+  verifyAdminToken
+} from "../lib/adminToken"
 
 const router = Router()
 const EXERCISE_DAILY_POINTS_CAP = 200
@@ -32,6 +40,13 @@ type CodingTask = {
   id: string
   title: string
   description: string
+  materialRequirement?: string | null
+  scoringRubric?: string | null
+  requirementSteps?: Array<{
+    id: string
+    text: string
+    imageUrl?: string | null
+  }>
   inputDescription: string
   outputDescription: string
   sampleInput1: string
@@ -106,6 +121,24 @@ const asInt = (value: unknown) => {
     if (Number.isInteger(parsed)) return parsed
   }
   return NaN
+}
+
+function requireStudentOrAdmin(req: any, res: any, next: any) {
+  const studentToken = getStudentTokenFromRequest(req as any)
+  const studentOk = studentToken ? verifyStudentToken(studentToken) : null
+  if (studentOk) {
+    req.studentId = studentOk.studentId
+    return next()
+  }
+
+  const adminToken = getAdminTokenFromRequest(req as any)
+  const adminOk = adminToken ? verifyAdminToken(adminToken) : null
+  if (adminOk) {
+    req.adminUserId = adminOk.userId
+    return next()
+  }
+
+  return res.status(401).json({ error: "unauthorized" })
 }
 
 function decodeDataUrl(input: string) {
@@ -193,6 +226,25 @@ function isCodingTask(value: unknown): value is CodingTask {
     typeof item.id === "string" &&
     typeof item.title === "string" &&
     typeof item.description === "string" &&
+    (item.materialRequirement === undefined ||
+      item.materialRequirement === null ||
+      typeof item.materialRequirement === "string") &&
+    (item.scoringRubric === undefined ||
+      item.scoringRubric === null ||
+      typeof item.scoringRubric === "string") &&
+    (item.requirementSteps === undefined ||
+      (Array.isArray(item.requirementSteps) &&
+        item.requirementSteps.every(step => {
+          if (!step || typeof step !== "object") return false
+          const node = step as Record<string, unknown>
+          return (
+            typeof node.id === "string" &&
+            typeof node.text === "string" &&
+            (node.imageUrl === undefined ||
+              node.imageUrl === null ||
+              typeof node.imageUrl === "string")
+          )
+        }))) &&
     typeof item.inputDescription === "string" &&
     typeof item.outputDescription === "string" &&
     typeof item.sampleInput1 === "string" &&
@@ -221,13 +273,7 @@ function parseMultipleChoice(value: unknown): MultipleChoiceQuestion[] | null {
   for (const question of value) {
     if (!question.id.trim() || !question.prompt.trim()) return null
     if (question.options.length < 2) return null
-    if (
-      question.options.some(
-        option =>
-          !option.id.trim() ||
-          (!option.text.trim() && !(option.imageUrl && option.imageUrl.trim()))
-      )
-    ) {
+    if (question.options.some(option => !option.id.trim())) {
       return null
     }
     const optionIds = new Set(question.options.map(option => option.id))
@@ -270,6 +316,9 @@ function parseCodingTasks(
 
   for (const task of value) {
     if (!task.id.trim() || !task.title.trim() || !task.description.trim()) return null
+    if (task.requirementSteps && task.requirementSteps.some(step => !step.id.trim())) {
+      return null
+    }
     if (task.answerMode && task.answerMode !== "TEXT" && task.answerMode !== "SCRATCH_FILE") {
       return null
     }
@@ -500,6 +549,33 @@ router.get("/", requireStudent, async (req: any, res) => {
       }
     })
   )
+})
+
+router.get("/assets/:encodedKey", requireStudentOrAdmin, async (req, res) => {
+  const encodedKey = asString(req.params.encodedKey)
+  if (!encodedKey) return res.status(400).json({ error: "invalid key" })
+
+  let key = ""
+  try {
+    key = decodeURIComponent(encodedKey)
+  } catch {
+    return res.status(400).json({ error: "invalid key" })
+  }
+  if (!key || key.includes("..")) {
+    return res.status(400).json({ error: "invalid key" })
+  }
+
+  const signedUrl = getSignedDownloadUrl(key, 60 * 10)
+  const upstream = await fetch(signedUrl)
+  if (!upstream.ok) {
+    return res.status(404).json({ error: "asset not found" })
+  }
+
+  const body = Buffer.from(await upstream.arrayBuffer())
+  const contentType = upstream.headers.get("content-type") || "application/octet-stream"
+  res.setHeader("content-type", contentType)
+  res.setHeader("cache-control", "private, max-age=300")
+  return res.status(200).send(body)
 })
 
 router.get("/:slug", requireStudent, async (req, res) => {

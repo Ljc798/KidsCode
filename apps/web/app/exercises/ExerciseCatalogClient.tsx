@@ -22,12 +22,21 @@ type ExerciseCard = {
 
 const LEVELS = Array.from({ length: 18 }, (_, index) => index + 1)
 
+function normalizeMediaUrl(url: string | null) {
+  if (!url) return null
+  if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("http://")) {
+    return `https://${url.slice("http://".length)}`
+  }
+  return url
+}
+
 function Cover({ title, imageUrl }: { title: string; imageUrl: string | null }) {
-  if (imageUrl) {
+  const normalizedImageUrl = normalizeMediaUrl(imageUrl)
+  if (normalizedImageUrl) {
     return (
       <div
         className="h-40 rounded-[1.75rem] bg-cover bg-center"
-        style={{ backgroundImage: `linear-gradient(135deg, rgba(14,23,38,0.18), rgba(14,23,38,0.42)), url(${imageUrl})` }}
+        style={{ backgroundImage: `linear-gradient(135deg, rgba(14,23,38,0.18), rgba(14,23,38,0.42)), url(${normalizedImageUrl})` }}
       />
     )
   }

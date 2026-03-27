@@ -148,7 +148,7 @@ export async function uploadObject(params: UploadParams) {
     size: params.body.byteLength,
     publicUrl: config.publicBaseUrl
       ? `${config.publicBaseUrl.replace(/\/+$/, "")}/${encodeKeyForPath(params.key)}`
-      : null
+      : `https://${config.bucket}.cos.${config.region}.myqcloud.com/${encodeKeyForPath(params.key)}`
   }
 }
 

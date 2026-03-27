@@ -23,6 +23,13 @@ type CodingTask = {
   id: string
   title: string
   description: string
+  materialRequirement?: string | null
+  scoringRubric?: string | null
+  requirementSteps?: Array<{
+    id: string
+    text: string
+    imageUrl?: string | null
+  }>
   inputDescription: string
   outputDescription: string
   sampleInput1: string
@@ -200,6 +207,14 @@ function OptionText({ text }: { text: string }) {
 
 function codingStatusLabel(status: "PENDING" | "REVIEWED") {
   return status === "REVIEWED" ? "已批改" : "待批改"
+}
+
+function normalizeMediaUrl(url?: string | null) {
+  if (!url) return ""
+  if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("http://")) {
+    return `https://${url.slice("http://".length)}`
+  }
+  return url
 }
 
 export default function ExerciseDetailClient() {
@@ -569,9 +584,9 @@ export default function ExerciseDetailClient() {
             <div className="mt-4">
               <PromptBlock text={currentStep.question.prompt} />
             </div>
-            {currentStep.question.promptImageUrl ? (
+            {exercise.subject === "SCRATCH" && currentStep.question.promptImageUrl ? (
               <img
-                src={currentStep.question.promptImageUrl}
+                src={normalizeMediaUrl(currentStep.question.promptImageUrl)}
                 alt="题干图片"
                 className="mt-4 max-h-80 w-full rounded-[1.2rem] border border-black/10 object-contain dark:border-white/10"
               />
@@ -598,7 +613,7 @@ export default function ExerciseDetailClient() {
                     className={[
                       "rounded-[1.3rem] border px-5 py-4 text-left text-[15px] leading-7 font-medium transition",
                       checked
-                        ? "border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950"
+                        ? "border-teal-500 bg-teal-500/10 text-teal-800 dark:border-teal-300 dark:bg-teal-300/15 dark:text-teal-100"
                         : "border-black/10 bg-white text-zinc-800 hover:border-black/20 hover:bg-zinc-50 dark:border-white/10 dark:bg-zinc-950/50 dark:text-zinc-100 dark:hover:bg-white/10",
                       isCorrect && (submitResult || isReviewMode)
                         ? "!border-sky-500 !bg-sky-500/10 !text-sky-700 dark:!text-sky-200"
@@ -606,11 +621,11 @@ export default function ExerciseDetailClient() {
                       isWrongSelected ? "!border-red-500 !bg-red-500/10 !text-red-700 dark:!text-red-200" : ""
                     ].join(" ")}
                   >
-                    {option.imageUrl ? (
+                    {exercise.subject === "SCRATCH" && option.imageUrl ? (
                       <img
-                        src={option.imageUrl}
+                        src={normalizeMediaUrl(option.imageUrl)}
                         alt="选项图片"
-                        className="mb-3 max-h-52 w-full rounded-xl border border-current/20 object-contain"
+                        className="mb-3 ml-0 mr-auto block max-h-36 max-w-full rounded-xl border border-current/20 object-contain"
                       />
                     ) : null}
                     <OptionText text={option.text} />
@@ -636,19 +651,19 @@ export default function ExerciseDetailClient() {
                   <div className="mt-2">
                     <PromptBlock text={currentStep.task.description} />
                   </div>
-                  {currentStep.task.descriptionImageUrl ? (
+                  {exercise.subject === "SCRATCH" && currentStep.task.descriptionImageUrl ? (
                     <img
-                      src={currentStep.task.descriptionImageUrl}
+                      src={normalizeMediaUrl(currentStep.task.descriptionImageUrl)}
                       alt="题目描述图片"
                       className="mt-3 max-h-72 w-full rounded-xl border border-black/10 object-contain dark:border-white/10"
                     />
                   ) : null}
-                  {(currentStep.task.referenceImageUrls ?? []).length > 0 ? (
+                  {exercise.subject === "SCRATCH" && (currentStep.task.referenceImageUrls ?? []).length > 0 ? (
                     <div className="mt-3 grid gap-3">
                       {(currentStep.task.referenceImageUrls ?? []).map((url, index) => (
                         <img
                           key={`${url}-${index}`}
-                          src={url}
+                          src={normalizeMediaUrl(url)}
                           alt={`参考图 ${index + 1}`}
                           className="max-h-72 w-full rounded-xl border border-black/10 object-contain dark:border-white/10"
                         />
@@ -657,7 +672,59 @@ export default function ExerciseDetailClient() {
                   ) : null}
                 </div>
 
-                {[
+                {exercise.subject === "SCRATCH" && (currentStep.task.materialRequirement ?? "").trim() ? (
+                  <div className="rounded-[1.3rem] border border-black/10 bg-white/70 p-4 dark:border-white/10 dark:bg-zinc-900/40">
+                    <div className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                      素材要求
+                    </div>
+                    <div className="mt-2 whitespace-pre-wrap text-[14px] leading-7 text-zinc-700 dark:text-zinc-200">
+                      {currentStep.task.materialRequirement}
+                    </div>
+                  </div>
+                ) : null}
+
+                {exercise.subject === "SCRATCH" && (currentStep.task.requirementSteps ?? []).length > 0 ? (
+                  <div className="rounded-[1.3rem] border border-black/10 bg-white/70 p-4 dark:border-white/10 dark:bg-zinc-900/40">
+                    <div className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                      具体要求（步骤）
+                    </div>
+                    <div className="mt-3 space-y-3">
+                      {(currentStep.task.requirementSteps ?? []).map((step, index) => (
+                        <div
+                          key={step.id || `${index}`}
+                          className="rounded-xl border border-black/10 bg-white/80 p-3 dark:border-white/10 dark:bg-zinc-950/40"
+                        >
+                          <div className="text-xs font-semibold text-zinc-500 dark:text-zinc-300">
+                            第 {index + 1} 步
+                          </div>
+                          <div className="mt-1 whitespace-pre-wrap text-[14px] leading-7 text-zinc-700 dark:text-zinc-200">
+                            {step.text}
+                          </div>
+                          {step.imageUrl ? (
+                            <img
+                              src={normalizeMediaUrl(step.imageUrl)}
+                              alt={`步骤 ${index + 1} 图片`}
+                              className="mt-2 max-h-72 w-full rounded-xl border border-black/10 object-contain dark:border-white/10"
+                            />
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {exercise.subject === "SCRATCH" && (currentStep.task.scoringRubric ?? "").trim() ? (
+                  <div className="rounded-[1.3rem] border border-black/10 bg-white/70 p-4 dark:border-white/10 dark:bg-zinc-900/40">
+                    <div className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                      评分标准
+                    </div>
+                    <div className="mt-2 whitespace-pre-wrap text-[14px] leading-7 text-zinc-700 dark:text-zinc-200">
+                      {currentStep.task.scoringRubric}
+                    </div>
+                  </div>
+                ) : null}
+
+                {exercise.subject === "CPP" ? [
                   ["输入", currentStep.task.inputDescription],
                   ["输出", currentStep.task.outputDescription]
                 ].map(([label, content]) => (
@@ -672,9 +739,9 @@ export default function ExerciseDetailClient() {
                       {content || "无"}
                     </div>
                   </div>
-                ))}
+                )) : null}
 
-                {[
+                {exercise.subject === "CPP" ? [
                   ["输入样例 1", currentStep.task.sampleInput1],
                   ["输出样例 1", currentStep.task.sampleOutput1],
                   ["输入样例 2", currentStep.task.sampleInput2],
@@ -691,7 +758,7 @@ export default function ExerciseDetailClient() {
                       {content || "无"}
                     </pre>
                   </div>
-                ))}
+                )) : null}
               </div>
             </div>
 

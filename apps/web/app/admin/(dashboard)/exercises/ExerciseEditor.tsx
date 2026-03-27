@@ -17,6 +17,13 @@ type CodingTask = {
   id: string
   title: string
   description: string
+  materialRequirement?: string | null
+  scoringRubric?: string | null
+  requirementSteps?: Array<{
+    id: string
+    text: string
+    imageUrl?: string | null
+  }>
   inputDescription: string
   outputDescription: string
   sampleInput1: string
@@ -92,6 +99,9 @@ function createCodingTask(): CodingTask {
     id: nextId("coding"),
     title: "",
     description: "",
+    materialRequirement: "",
+    scoringRubric: "",
+    requirementSteps: [],
     inputDescription: "",
     outputDescription: "",
     sampleInput1: "",
@@ -439,6 +449,7 @@ export default function ExerciseEditor({
                     required
                   />
                 </label>
+                {form.subject === "SCRATCH" ? (
                 <div className="mt-3 grid gap-2 text-sm">
                   <span className="font-semibold text-zinc-700 dark:text-zinc-300">题干图片 URL（可选）</span>
                   <div className="flex flex-wrap gap-2">
@@ -484,6 +495,7 @@ export default function ExerciseEditor({
                     />
                   ) : null}
                 </div>
+                ) : null}
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   {question.options.map((option, optionIndex) => (
@@ -502,7 +514,10 @@ export default function ExerciseEditor({
                           }))
                         }
                         className="h-10 rounded-xl border border-black/10 bg-white/80 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                        required={form.subject === "CPP"}
                       />
+                      {form.subject === "SCRATCH" ? (
+                      <>
                       <div className="flex flex-wrap gap-2">
                         <input
                           value={option.imageUrl ?? ""}
@@ -549,6 +564,8 @@ export default function ExerciseEditor({
                           alt={`选项 ${optionIndex + 1} 图片`}
                           className="max-h-40 rounded-xl border border-black/10 object-contain dark:border-white/10"
                         />
+                      ) : null}
+                      </>
                       ) : null}
                     </label>
                   ))}
@@ -646,6 +663,22 @@ export default function ExerciseEditor({
                       required
                     />
                   </label>
+                  {form.subject === "SCRATCH" ? (
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">素材要求（可选）</span>
+                    <textarea
+                      value={task.materialRequirement ?? ""}
+                      onChange={event =>
+                        updateCodingTask(task.id, current => ({
+                          ...current,
+                          materialRequirement: event.target.value
+                        }))
+                      }
+                      className="min-h-20 rounded-xl border border-black/10 bg-white/80 px-3 py-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                    />
+                  </label>
+                  ) : null}
+                  {form.subject === "SCRATCH" ? (
                   <label className="grid gap-1 text-sm">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300">作答方式</span>
                     <select
@@ -663,6 +696,132 @@ export default function ExerciseEditor({
                       <option value="SCRATCH_FILE">上传 Scratch 文件(.sb3)</option>
                     </select>
                   </label>
+                  ) : null}
+                  {form.subject === "SCRATCH" ? (
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">评分标准（可选）</span>
+                    <textarea
+                      value={task.scoringRubric ?? ""}
+                      onChange={event =>
+                        updateCodingTask(task.id, current => ({
+                          ...current,
+                          scoringRubric: event.target.value
+                        }))
+                      }
+                      className="min-h-20 rounded-xl border border-black/10 bg-white/80 px-3 py-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                    />
+                  </label>
+                  ) : null}
+                  {form.subject === "SCRATCH" ? (
+                  <div className="grid gap-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-zinc-700 dark:text-zinc-300">具体要求（分步图文）</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateCodingTask(task.id, current => ({
+                            ...current,
+                            requirementSteps: [
+                              ...(current.requirementSteps ?? []),
+                              { id: nextId("step"), text: "", imageUrl: "" }
+                            ]
+                          }))
+                        }
+                        className="rounded-lg border border-black/10 px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
+                      >
+                        新增步骤
+                      </button>
+                    </div>
+                    {(task.requirementSteps ?? []).length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-black/10 px-3 py-3 text-xs text-zinc-500 dark:border-white/10 dark:text-zinc-400">
+                        还没有步骤，点击“新增步骤”
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {(task.requirementSteps ?? []).map((step, stepIndex) => (
+                          <div
+                            key={step.id}
+                            className="rounded-xl border border-black/10 bg-white/70 p-3 dark:border-white/10 dark:bg-zinc-950/40"
+                          >
+                            <div className="mb-2 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                                步骤 {stepIndex + 1}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateCodingTask(task.id, current => ({
+                                    ...current,
+                                    requirementSteps: (current.requirementSteps ?? []).filter(
+                                      item => item.id !== step.id
+                                    )
+                                  }))
+                                }
+                                className="rounded-lg border border-red-500/25 bg-red-500/5 px-2 py-1 text-xs font-semibold text-red-700 dark:text-red-200"
+                              >
+                                删除
+                              </button>
+                            </div>
+                            <textarea
+                              value={step.text}
+                              onChange={event =>
+                                updateCodingTask(task.id, current => ({
+                                  ...current,
+                                  requirementSteps: (current.requirementSteps ?? []).map(item =>
+                                    item.id === step.id ? { ...item, text: event.target.value } : item
+                                  )
+                                }))
+                              }
+                              placeholder="步骤说明文字"
+                              className="min-h-20 w-full rounded-xl border border-black/10 bg-white/80 px-3 py-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                            />
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <input
+                                value={step.imageUrl ?? ""}
+                                onChange={event =>
+                                  updateCodingTask(task.id, current => ({
+                                    ...current,
+                                    requirementSteps: (current.requirementSteps ?? []).map(item =>
+                                      item.id === step.id ? { ...item, imageUrl: event.target.value } : item
+                                    )
+                                  }))
+                                }
+                                placeholder="步骤图片 URL（可选）"
+                                className="h-10 min-w-[220px] flex-1 rounded-xl border border-black/10 bg-white/80 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                              />
+                              <label className="inline-flex h-10 cursor-pointer items-center rounded-xl border border-black/10 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5">
+                                上传到 COS
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={async event => {
+                                    const file = event.target.files?.[0]
+                                    if (!file) return
+                                    await uploadAsset(
+                                      `coding-${task.id}-step-${step.id}`,
+                                      `${task.id}-step-${stepIndex + 1}`,
+                                      file,
+                                      url =>
+                                        updateCodingTask(task.id, current => ({
+                                          ...current,
+                                          requirementSteps: (current.requirementSteps ?? []).map(item =>
+                                            item.id === step.id ? { ...item, imageUrl: url } : item
+                                          )
+                                        }))
+                                    )
+                                    event.currentTarget.value = ""
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  ) : null}
+                  {form.subject === "SCRATCH" ? (
                   <div className="grid gap-2 text-sm">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300">描述图片 URL（可选）</span>
                     <div className="flex flex-wrap gap-2">
@@ -701,6 +860,8 @@ export default function ExerciseEditor({
                       </label>
                     </div>
                   </div>
+                  ) : null}
+                  {form.subject === "SCRATCH" ? (
                   <label className="grid gap-1 text-sm">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300">参考图片 URL（每行一个，可选）</span>
                     <textarea
@@ -717,6 +878,8 @@ export default function ExerciseEditor({
                       className="min-h-24 rounded-xl border border-black/10 bg-white/80 px-3 py-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
                     />
                   </label>
+                  ) : null}
+                  {form.subject === "CPP" ? (
                   <div className="grid gap-4 lg:grid-cols-2">
                     <label className="grid gap-1 text-sm">
                       <span className="font-semibold text-zinc-700 dark:text-zinc-300">输入</span>
@@ -745,6 +908,8 @@ export default function ExerciseEditor({
                       />
                     </label>
                   </div>
+                  ) : null}
+                  {form.subject === "CPP" ? (
                   <div className="grid gap-4 lg:grid-cols-2">
                     <label className="grid gap-1 text-sm">
                       <span className="font-semibold text-zinc-700 dark:text-zinc-300">输入样例 1</span>
@@ -773,6 +938,8 @@ export default function ExerciseEditor({
                       />
                     </label>
                   </div>
+                  ) : null}
+                  {form.subject === "CPP" ? (
                   <div className="grid gap-4 lg:grid-cols-2">
                     <label className="grid gap-1 text-sm">
                       <span className="font-semibold text-zinc-700 dark:text-zinc-300">输入样例 2</span>
@@ -801,6 +968,8 @@ export default function ExerciseEditor({
                       />
                     </label>
                   </div>
+                  ) : null}
+                  {form.subject === "CPP" ? (
                   <label className="grid gap-1 text-sm">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300">输入框提示语</span>
                     <input
@@ -814,6 +983,7 @@ export default function ExerciseEditor({
                       className="h-10 rounded-xl border border-black/10 bg-white/80 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
                     />
                   </label>
+                  ) : null}
                 </div>
               </div>
             ))}

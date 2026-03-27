@@ -23,6 +23,13 @@ type CodingTask = {
   id: string
   title: string
   description: string
+  materialRequirement?: string | null
+  scoringRubric?: string | null
+  requirementSteps?: Array<{
+    id: string
+    text: string
+    imageUrl?: string | null
+  }>
   inputDescription: string
   outputDescription: string
   sampleInput1: string
@@ -118,6 +125,25 @@ function isCodingTask(value: unknown): value is CodingTask {
     typeof item.id === "string" &&
     typeof item.title === "string" &&
     typeof item.description === "string" &&
+    (item.materialRequirement === undefined ||
+      item.materialRequirement === null ||
+      typeof item.materialRequirement === "string") &&
+    (item.scoringRubric === undefined ||
+      item.scoringRubric === null ||
+      typeof item.scoringRubric === "string") &&
+    (item.requirementSteps === undefined ||
+      (Array.isArray(item.requirementSteps) &&
+        item.requirementSteps.every(step => {
+          if (!step || typeof step !== "object") return false
+          const node = step as Record<string, unknown>
+          return (
+            typeof node.id === "string" &&
+            typeof node.text === "string" &&
+            (node.imageUrl === undefined ||
+              node.imageUrl === null ||
+              typeof node.imageUrl === "string")
+          )
+        }))) &&
     typeof item.inputDescription === "string" &&
     typeof item.outputDescription === "string" &&
     typeof item.sampleInput1 === "string" &&
@@ -139,9 +165,16 @@ function isCodingTask(value: unknown): value is CodingTask {
   )
 }
 
-function parseMultipleChoice(value: unknown): MultipleChoiceQuestion[] | null {
+function parseMultipleChoice(
+  value: unknown,
+  options?: {
+    allowImageOnlyOption?: boolean
+  }
+): MultipleChoiceQuestion[] | null {
   if (!Array.isArray(value)) return null
   if (!value.every(isMultipleChoiceQuestion)) return null
+
+  const allowImageOnlyOption = options?.allowImageOnlyOption === true
 
   for (const question of value) {
     if (!question.id.trim() || !question.prompt.trim()) return null
@@ -150,7 +183,10 @@ function parseMultipleChoice(value: unknown): MultipleChoiceQuestion[] | null {
       question.options.some(
         option =>
           !option.id.trim() ||
-          (!option.text.trim() && !(option.imageUrl && option.imageUrl.trim()))
+          (!allowImageOnlyOption && !option.text.trim()) ||
+          (allowImageOnlyOption &&
+            !option.text.trim() &&
+            !(option.imageUrl && option.imageUrl.trim()))
       )
     ) {
       return null
@@ -195,6 +231,9 @@ function parseCodingTasks(
 
   for (const task of value) {
     if (!task.id.trim() || !task.title.trim() || !task.description.trim()) return null
+    if (task.requirementSteps && task.requirementSteps.some(step => !step.id.trim())) {
+      return null
+    }
     if (task.answerMode && task.answerMode !== "TEXT" && task.answerMode !== "SCRATCH_FILE") {
       return null
     }
@@ -246,15 +285,11 @@ router.post("/asset-upload", async (req, res) => {
     contentType: mimeTypeRaw || decoded.mimeType
   })
 
-  if (!uploaded.publicUrl) {
-    return res.status(500).json({ error: "OBJECT_STORAGE_PUBLIC_BASE_URL is not configured" })
-  }
-
   res.json({
     ok: true,
     file: {
       key: uploaded.key,
-      url: uploaded.publicUrl,
+      url: `/api/exercises/assets/${encodeURIComponent(uploaded.key)}`,
       size: uploaded.size
     }
   })
@@ -286,7 +321,10 @@ router.get("/", async (_req, res) => {
 
   res.json(
     banks.map(bank => {
-      const multipleChoice = parseMultipleChoice(bank.multipleChoice) ?? []
+      const multipleChoice =
+        parseMultipleChoice(bank.multipleChoice, {
+          allowImageOnlyOption: bank.subject === "SCRATCH"
+        }) ?? []
       const codingTasks =
         parseCodingTasks(bank.codingTasks, {
           codingTitle: bank.codingTitle,
@@ -348,7 +386,9 @@ router.get("/:id", async (req, res) => {
     codingPrompt: bank.codingPrompt,
     codingPlaceholder: bank.codingPlaceholder
   })
-  const multipleChoice = parseMultipleChoice(bank.multipleChoice)
+  const multipleChoice = parseMultipleChoice(bank.multipleChoice, {
+    allowImageOnlyOption: bank.subject === "SCRATCH"
+  })
   if (!codingTasks || !multipleChoice) {
     return res.status(500).json({ error: "exercise data is invalid" })
   }
@@ -380,7 +420,9 @@ router.post("/", async (req, res) => {
   const level = asInt(req.body?.level)
   const difficultyLevel =
     req.body?.difficultyLevel === undefined ? level : asInt(req.body?.difficultyLevel)
-  const multipleChoice = parseMultipleChoice(req.body?.multipleChoice)
+  const multipleChoice = parseMultipleChoice(req.body?.multipleChoice, {
+    allowImageOnlyOption: subject === "SCRATCH"
+  })
   const codingTasks = parseCodingTasks(req.body?.codingTasks)
   const providedSlug = asString(req.body?.slug)
   const slug = slugify(providedSlug || title)
@@ -474,11 +516,7 @@ router.patch("/:id", async (req, res) => {
     data.difficultyLevel = asInt(req.body.difficultyLevel)
   }
   if (req.body?.multipleChoice !== undefined) {
-    const multipleChoice = parseMultipleChoice(req.body.multipleChoice)
-    if (!multipleChoice) {
-      return res.status(400).json({ error: "multipleChoice is invalid" })
-    }
-    data.multipleChoice = multipleChoice
+    data.multipleChoice = req.body.multipleChoice
   }
   if (req.body?.codingTasks !== undefined) {
     const codingTasks = parseCodingTasks(req.body.codingTasks)
@@ -494,6 +532,16 @@ router.patch("/:id", async (req, res) => {
     data.isPublished = asBoolean(req.body.isPublished, true)
   }
 
+  const existingMeta = await prisma.exerciseBank.findUnique({
+    where: { id },
+    select: {
+      subject: true,
+      difficultyType: true,
+      difficultyLevel: true
+    }
+  })
+  if (!existingMeta) return res.status(404).json({ error: "not found" })
+
   if (data.multipleChoice !== undefined || data.codingTasks !== undefined) {
     const existing = await prisma.exerciseBank.findUnique({
       where: { id },
@@ -507,10 +555,19 @@ router.patch("/:id", async (req, res) => {
     })
     if (!existing) return res.status(404).json({ error: "not found" })
 
+    const effectiveSubject = ((data.subject as ExerciseSubject | undefined) ??
+      existingMeta.subject) as ExerciseSubject
     const multipleChoice =
       data.multipleChoice === undefined
-        ? parseMultipleChoice(existing.multipleChoice) ?? []
-        : (data.multipleChoice as MultipleChoiceQuestion[])
+        ? parseMultipleChoice(existing.multipleChoice, {
+            allowImageOnlyOption: effectiveSubject === "SCRATCH"
+          }) ?? []
+        : parseMultipleChoice(data.multipleChoice, {
+            allowImageOnlyOption: effectiveSubject === "SCRATCH"
+          }) ?? null
+    if (!multipleChoice) {
+      return res.status(400).json({ error: "multipleChoice is invalid" })
+    }
     const codingTasks =
       data.codingTasks === undefined
         ? parseCodingTasks(existing.codingTasks, {
@@ -524,16 +581,6 @@ router.patch("/:id", async (req, res) => {
       return res.status(400).json({ error: "add at least one question or coding task" })
     }
   }
-
-  const existingMeta = await prisma.exerciseBank.findUnique({
-    where: { id },
-    select: {
-      subject: true,
-      difficultyType: true,
-      difficultyLevel: true
-    }
-  })
-  if (!existingMeta) return res.status(404).json({ error: "not found" })
 
   const nextDifficultyType = (data.difficultyType as ExerciseDifficultyType | undefined) ?? existingMeta.difficultyType
   const nextDifficultyLevel =
