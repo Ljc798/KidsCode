@@ -1,17 +1,20 @@
 import { Router } from "express"
 import { prisma } from "@kidscode/database"
 import { requireAdmin } from "../middleware/requireAdmin"
+import { createExerciseAssetObjectKey, uploadObject } from "../lib/objectStorage"
 
 const router = Router()
 
 type ChoiceOption = {
   id: string
   text: string
+  imageUrl?: string | null
 }
 
 type MultipleChoiceQuestion = {
   id: string
   prompt: string
+  promptImageUrl?: string | null
   options: ChoiceOption[]
   correctOptionId: string
 }
@@ -26,6 +29,9 @@ type CodingTask = {
   sampleOutput1: string
   sampleInput2: string
   sampleOutput2: string
+  answerMode?: "TEXT" | "SCRATCH_FILE"
+  descriptionImageUrl?: string | null
+  referenceImageUrls?: string[]
   placeholder?: string | null
 }
 
@@ -44,6 +50,26 @@ const asInt = (value: unknown) => {
 const asBoolean = (value: unknown, fallback: boolean) =>
   typeof value === "boolean" ? value : fallback
 
+type ExerciseSubject = "CPP" | "SCRATCH"
+type ExerciseDifficultyType = "LEVEL" | "OTHER"
+
+const asSubject = (value: unknown): ExerciseSubject =>
+  value === "SCRATCH" ? "SCRATCH" : "CPP"
+
+const asDifficultyType = (value: unknown): ExerciseDifficultyType =>
+  value === "OTHER" ? "OTHER" : "LEVEL"
+
+function decodeDataUrl(input: string) {
+  const match = input.match(/^data:([^;,]+)?;base64,(.+)$/)
+  if (!match) {
+    throw new Error("content must be a base64 data URL")
+  }
+  return {
+    mimeType: match[1] || "application/octet-stream",
+    buffer: Buffer.from(match[2], "base64")
+  }
+}
+
 function slugify(input: string) {
   return input
     .trim()
@@ -56,7 +82,13 @@ function slugify(input: string) {
 function isChoiceOption(value: unknown): value is ChoiceOption {
   if (!value || typeof value !== "object") return false
   const item = value as Record<string, unknown>
-  return typeof item.id === "string" && typeof item.text === "string"
+  return (
+    typeof item.id === "string" &&
+    typeof item.text === "string" &&
+    (item.imageUrl === undefined ||
+      item.imageUrl === null ||
+      typeof item.imageUrl === "string")
+  )
 }
 
 function isMultipleChoiceQuestion(
@@ -68,6 +100,9 @@ function isMultipleChoiceQuestion(
     typeof item.id !== "string" ||
     typeof item.prompt !== "string" ||
     typeof item.correctOptionId !== "string" ||
+    (item.promptImageUrl !== undefined &&
+      item.promptImageUrl !== null &&
+      typeof item.promptImageUrl !== "string") ||
     !Array.isArray(item.options)
   ) {
     return false
@@ -89,6 +124,15 @@ function isCodingTask(value: unknown): value is CodingTask {
     typeof item.sampleOutput1 === "string" &&
     typeof item.sampleInput2 === "string" &&
     typeof item.sampleOutput2 === "string" &&
+    (item.answerMode === undefined ||
+      item.answerMode === "TEXT" ||
+      item.answerMode === "SCRATCH_FILE") &&
+    (item.descriptionImageUrl === undefined ||
+      item.descriptionImageUrl === null ||
+      typeof item.descriptionImageUrl === "string") &&
+    (item.referenceImageUrls === undefined ||
+      (Array.isArray(item.referenceImageUrls) &&
+        item.referenceImageUrls.every(url => typeof url === "string"))) &&
     (item.placeholder === undefined ||
       item.placeholder === null ||
       typeof item.placeholder === "string")
@@ -102,7 +146,13 @@ function parseMultipleChoice(value: unknown): MultipleChoiceQuestion[] | null {
   for (const question of value) {
     if (!question.id.trim() || !question.prompt.trim()) return null
     if (question.options.length < 2) return null
-    if (question.options.some(option => !option.id.trim() || !option.text.trim())) {
+    if (
+      question.options.some(
+        option =>
+          !option.id.trim() ||
+          (!option.text.trim() && !(option.imageUrl && option.imageUrl.trim()))
+      )
+    ) {
       return null
     }
     const optionIds = new Set(question.options.map(option => option.id))
@@ -145,6 +195,9 @@ function parseCodingTasks(
 
   for (const task of value) {
     if (!task.id.trim() || !task.title.trim() || !task.description.trim()) return null
+    if (task.answerMode && task.answerMode !== "TEXT" && task.answerMode !== "SCRATCH_FILE") {
+      return null
+    }
   }
 
   return value
@@ -152,15 +205,73 @@ function parseCodingTasks(
 
 router.use(requireAdmin)
 
+router.post("/asset-upload", async (req, res) => {
+  const subject = asSubject(req.body?.subject)
+  const difficultyType = asDifficultyType(req.body?.difficultyType)
+  const difficultyLevel = asInt(req.body?.difficultyLevel)
+  const slug = asString(req.body?.slug) || "exercise"
+  const questionId = asString(req.body?.questionId) || "question"
+  const fileName = asString(req.body?.fileName)
+  const dataUrl = typeof req.body?.content === "string" ? req.body.content : ""
+  const mimeTypeRaw = asString(req.body?.mimeType)
+
+  if (!fileName) return res.status(400).json({ error: "fileName is required" })
+  if (!dataUrl) return res.status(400).json({ error: "content is required" })
+  if (difficultyType === "LEVEL" && (!Number.isInteger(difficultyLevel) || difficultyLevel < 1 || difficultyLevel > 18)) {
+    return res.status(400).json({ error: "difficultyLevel must be between 1 and 18" })
+  }
+
+  let decoded: { mimeType: string; buffer: Buffer }
+  try {
+    decoded = decodeDataUrl(dataUrl)
+  } catch (error: unknown) {
+    return res.status(400).json({ error: error instanceof Error ? error.message : "invalid content" })
+  }
+
+  if (decoded.buffer.byteLength > 12_000_000) {
+    return res.status(400).json({ error: "image is too large" })
+  }
+
+  const key = createExerciseAssetObjectKey({
+    subject,
+    difficultyType,
+    difficultyLevel: difficultyType === "LEVEL" ? difficultyLevel : null,
+    slug,
+    questionId,
+    fileName
+  })
+  const uploaded = await uploadObject({
+    key,
+    body: decoded.buffer,
+    contentType: mimeTypeRaw || decoded.mimeType
+  })
+
+  if (!uploaded.publicUrl) {
+    return res.status(500).json({ error: "OBJECT_STORAGE_PUBLIC_BASE_URL is not configured" })
+  }
+
+  res.json({
+    ok: true,
+    file: {
+      key: uploaded.key,
+      url: uploaded.publicUrl,
+      size: uploaded.size
+    }
+  })
+})
+
 router.get("/", async (_req, res) => {
   const banks = await prisma.exerciseBank.findMany({
-    orderBy: [{ level: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ difficultyType: "asc" }, { difficultyLevel: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
       slug: true,
       title: true,
       summary: true,
       imageUrl: true,
+      subject: true,
+      difficultyType: true,
+      difficultyLevel: true,
       level: true,
       isPublished: true,
       updatedAt: true,
@@ -189,6 +300,9 @@ router.get("/", async (_req, res) => {
         title: bank.title,
         summary: bank.summary,
         imageUrl: bank.imageUrl,
+        subject: bank.subject,
+        difficultyType: bank.difficultyType,
+        difficultyLevel: bank.difficultyLevel,
         level: bank.level,
         isPublished: bank.isPublished,
         updatedAt: bank.updatedAt.toISOString(),
@@ -212,6 +326,9 @@ router.get("/:id", async (req, res) => {
       title: true,
       summary: true,
       imageUrl: true,
+      subject: true,
+      difficultyType: true,
+      difficultyLevel: true,
       level: true,
       isPublished: true,
       multipleChoice: true,
@@ -242,6 +359,9 @@ router.get("/:id", async (req, res) => {
     title: bank.title,
     summary: bank.summary,
     imageUrl: bank.imageUrl,
+    subject: bank.subject,
+    difficultyType: bank.difficultyType,
+    difficultyLevel: bank.difficultyLevel,
     level: bank.level,
     isPublished: bank.isPublished,
     multipleChoice,
@@ -255,7 +375,11 @@ router.post("/", async (req, res) => {
   const title = asString(req.body?.title)
   const summary = asString(req.body?.summary)
   const imageUrl = asString(req.body?.imageUrl)
+  const subject = asSubject(req.body?.subject)
+  const difficultyType = asDifficultyType(req.body?.difficultyType)
   const level = asInt(req.body?.level)
+  const difficultyLevel =
+    req.body?.difficultyLevel === undefined ? level : asInt(req.body?.difficultyLevel)
   const multipleChoice = parseMultipleChoice(req.body?.multipleChoice)
   const codingTasks = parseCodingTasks(req.body?.codingTasks)
   const providedSlug = asString(req.body?.slug)
@@ -264,8 +388,12 @@ router.post("/", async (req, res) => {
 
   if (!title) return res.status(400).json({ error: "title is required" })
   if (!slug) return res.status(400).json({ error: "slug is required" })
-  if (!Number.isInteger(level) || level < 1 || level > 18) {
-    return res.status(400).json({ error: "level must be between 1 and 18" })
+  if (difficultyType === "LEVEL") {
+    if (!Number.isInteger(difficultyLevel) || difficultyLevel < 1 || difficultyLevel > 18) {
+      return res.status(400).json({ error: "difficultyLevel must be between 1 and 18" })
+    }
+  } else if (difficultyLevel !== 0 && !Number.isNaN(difficultyLevel)) {
+    return res.status(400).json({ error: "difficultyLevel must be omitted for OTHER" })
   }
   if (!multipleChoice) {
     return res.status(400).json({ error: "multipleChoice is invalid" })
@@ -285,7 +413,10 @@ router.post("/", async (req, res) => {
         title,
         summary: summary || null,
         imageUrl: imageUrl || null,
-        level,
+        subject,
+        difficultyType,
+        difficultyLevel: difficultyType === "LEVEL" ? difficultyLevel : null,
+        level: difficultyType === "LEVEL" ? difficultyLevel : 0,
         multipleChoice,
         codingTasks,
         codingTitle: firstTask?.title ?? "",
@@ -329,12 +460,18 @@ router.patch("/:id", async (req, res) => {
   if (req.body?.imageUrl !== undefined) {
     data.imageUrl = asString(req.body.imageUrl) || null
   }
+  if (req.body?.subject !== undefined) {
+    data.subject = asSubject(req.body.subject)
+  }
+  if (req.body?.difficultyType !== undefined) {
+    data.difficultyType = asDifficultyType(req.body.difficultyType)
+  }
   if (req.body?.level !== undefined) {
     const level = asInt(req.body.level)
-    if (!Number.isInteger(level) || level < 1 || level > 18) {
-      return res.status(400).json({ error: "level must be between 1 and 18" })
-    }
     data.level = level
+  }
+  if (req.body?.difficultyLevel !== undefined) {
+    data.difficultyLevel = asInt(req.body.difficultyLevel)
   }
   if (req.body?.multipleChoice !== undefined) {
     const multipleChoice = parseMultipleChoice(req.body.multipleChoice)
@@ -386,6 +523,37 @@ router.patch("/:id", async (req, res) => {
     if (multipleChoice.length + codingTasks.length === 0) {
       return res.status(400).json({ error: "add at least one question or coding task" })
     }
+  }
+
+  const existingMeta = await prisma.exerciseBank.findUnique({
+    where: { id },
+    select: {
+      subject: true,
+      difficultyType: true,
+      difficultyLevel: true
+    }
+  })
+  if (!existingMeta) return res.status(404).json({ error: "not found" })
+
+  const nextDifficultyType = (data.difficultyType as ExerciseDifficultyType | undefined) ?? existingMeta.difficultyType
+  const nextDifficultyLevel =
+    (data.difficultyLevel as number | undefined) ??
+    (data.level as number | undefined) ??
+    existingMeta.difficultyLevel
+
+  if (nextDifficultyType === "LEVEL") {
+    if (
+      !Number.isInteger(nextDifficultyLevel) ||
+      (nextDifficultyLevel as number) < 1 ||
+      (nextDifficultyLevel as number) > 18
+    ) {
+      return res.status(400).json({ error: "difficultyLevel must be between 1 and 18" })
+    }
+    data.level = nextDifficultyLevel as number
+    data.difficultyLevel = nextDifficultyLevel as number
+  } else {
+    data.level = 0
+    data.difficultyLevel = null
   }
 
   try {

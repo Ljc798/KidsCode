@@ -10,6 +10,9 @@ type ExerciseCard = {
   title: string
   summary: string | null
   imageUrl: string | null
+  subject: "CPP" | "SCRATCH"
+  difficultyType: "LEVEL" | "OTHER"
+  difficultyLevel: number | null
   level: number
   codingTitle: string
   multipleChoiceCount: number
@@ -43,7 +46,8 @@ function Cover({ title, imageUrl }: { title: string; imageUrl: string | null }) 
 
 export default function ExerciseCatalogClient() {
   const [items, setItems] = useState<ExerciseCard[]>([])
-  const [level, setLevel] = useState<number | "all">("all")
+  const [subject, setSubject] = useState<"CPP" | "SCRATCH">("CPP")
+  const [difficulty, setDifficulty] = useState<number | "OTHER" | "all">("all")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -52,8 +56,16 @@ export default function ExerciseCatalogClient() {
       setLoading(true)
       setError(null)
       try {
-        const query = level === "all" ? "" : `?level=${level}`
-        const data = await apiFetch<ExerciseCard[]>(`/exercises${query}`)
+        const params = new URLSearchParams()
+        params.set("subject", subject)
+        if (difficulty === "OTHER") {
+          params.set("difficultyType", "OTHER")
+        } else if (difficulty !== "all") {
+          params.set("difficultyType", "LEVEL")
+          params.set("level", String(difficulty))
+        }
+        const query = params.toString()
+        const data = await apiFetch<ExerciseCard[]>(`/exercises${query ? `?${query}` : ""}`)
         setItems(data)
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "加载失败")
@@ -63,7 +75,7 @@ export default function ExerciseCatalogClient() {
     }
 
     run()
-  }, [level])
+  }, [subject, difficulty])
 
   return (
     <>
@@ -71,19 +83,51 @@ export default function ExerciseCatalogClient() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-xs font-black uppercase tracking-[0.24em] text-teal-700 dark:text-teal-300">
-              分级筛选
+              科目与分级筛选
             </div>
             <h2 className="mt-2 text-xl font-black tracking-tight text-zinc-950 dark:text-white">
-              从 1 级到 18 级，按学习进度选题
+              先选科目，再按等级或“其他”筛选题库
             </h2>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setLevel("all")}
+              onClick={() => {
+                setSubject("CPP")
+                setDifficulty("all")
+              }}
               className={[
                 "rounded-full px-4 py-2 text-sm font-bold transition",
-                level === "all"
+                subject === "CPP"
+                  ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                  : "bg-zinc-950/5 text-zinc-700 hover:bg-zinc-950/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              ].join(" ")}
+            >
+              C++
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSubject("SCRATCH")
+                setDifficulty("all")
+              }}
+              className={[
+                "rounded-full px-4 py-2 text-sm font-bold transition",
+                subject === "SCRATCH"
+                  ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                  : "bg-zinc-950/5 text-zinc-700 hover:bg-zinc-950/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              ].join(" ")}
+            >
+              Scratch
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setDifficulty("all")}
+              className={[
+                "rounded-full px-4 py-2 text-sm font-bold transition",
+                difficulty === "all"
                   ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
                   : "bg-zinc-950/5 text-zinc-700 hover:bg-zinc-950/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
               ].join(" ")}
@@ -94,10 +138,10 @@ export default function ExerciseCatalogClient() {
               <button
                 key={item}
                 type="button"
-                onClick={() => setLevel(item)}
+                onClick={() => setDifficulty(item)}
                 className={[
                   "rounded-full px-4 py-2 text-sm font-bold transition",
-                  level === item
+                  difficulty === item
                     ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
                     : "bg-zinc-950/5 text-zinc-700 hover:bg-zinc-950/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
                 ].join(" ")}
@@ -105,6 +149,18 @@ export default function ExerciseCatalogClient() {
                 {item} 级
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => setDifficulty("OTHER")}
+              className={[
+                "rounded-full px-4 py-2 text-sm font-bold transition",
+                difficulty === "OTHER"
+                  ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                  : "bg-zinc-950/5 text-zinc-700 hover:bg-zinc-950/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              ].join(" ")}
+            >
+              其他
+            </button>
           </div>
         </div>
       </div>
@@ -141,7 +197,7 @@ export default function ExerciseCatalogClient() {
                 <Cover title={item.title} imageUrl={item.imageUrl} />
                 <div className="mt-4 flex items-center justify-between gap-3">
                   <span className="rounded-full bg-amber-400/15 px-3 py-1 text-xs font-black tracking-[0.18em] text-amber-700 dark:text-amber-200">
-                    LEVEL {item.level}
+                    {item.subject === "SCRATCH" ? "SCRATCH" : "C++"} · {item.difficultyType === "OTHER" ? "其他" : `LEVEL ${item.difficultyLevel ?? item.level}`}
                   </span>
                   <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                     {item.multipleChoiceCount} 道选择 + {item.codingTaskCount} 道编程

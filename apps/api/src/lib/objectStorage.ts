@@ -48,7 +48,11 @@ function createClient(config: ObjectStorageConfig) {
 }
 
 function cleanPathSegment(value: string, fallback: string) {
-  const cleaned = value.trim().replace(/[\\/]+/g, "-").replace(/\s+/g, " ")
+  const cleaned = value
+    .trim()
+    .replace(/[\\/]+/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/[^\p{L}\p{N}._ -]+/gu, "-")
   return cleaned || fallback
 }
 
@@ -77,6 +81,41 @@ export function createScratchObjectKey(
   const categorySegment =
     category === "CLASSROOM" ? "scratch课堂创作" : "scratch自我创作"
   return `${safeOwnerName}/${categorySegment}/${safeFileName}`
+}
+
+export function createExerciseAssetObjectKey(input: {
+  subject: "CPP" | "SCRATCH"
+  difficultyType: "LEVEL" | "OTHER"
+  difficultyLevel?: number | null
+  slug: string
+  questionId: string
+  fileName: string
+}) {
+  const safeSubject = input.subject.toLowerCase()
+  const difficultySegment =
+    input.difficultyType === "LEVEL" && Number.isInteger(input.difficultyLevel)
+      ? `level${input.difficultyLevel}`
+      : "other"
+  const safeSlug = cleanPathSegment(input.slug, randomUUID())
+  const safeQuestionId = cleanPathSegment(input.questionId, "question")
+  const safeFileName = cleanPathSegment(input.fileName, "asset")
+  return `test/${safeSubject}/${difficultySegment}/${safeSlug}/${safeQuestionId}/${safeFileName}`
+}
+
+export function createExerciseScratchSubmissionObjectKey(input: {
+  studentId: string
+  slug: string
+  taskId: string
+  fileName: string
+}) {
+  const safeStudentId = cleanPathSegment(input.studentId, randomUUID())
+  const safeSlug = cleanPathSegment(input.slug, "exercise")
+  const safeTaskId = cleanPathSegment(input.taskId, "task")
+  const safeFileName = cleanPathSegment(
+    ensureExtension(input.fileName, input.fileName),
+    "answer.sb3"
+  )
+  return `exercise-submissions/scratch/${safeStudentId}/${safeSlug}/${safeTaskId}/${Date.now()}-${safeFileName}`
 }
 
 export async function uploadObject(params: UploadParams) {

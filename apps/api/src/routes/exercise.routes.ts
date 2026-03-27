@@ -3,6 +3,11 @@ import { prisma } from "@kidscode/database"
 import { requireStudent } from "../middleware/requireStudent"
 import { shanghaiDateKey } from "../lib/studentHelper"
 import { createAdminNotificationForAll } from "../lib/adminNotification"
+import {
+  createExerciseScratchSubmissionObjectKey,
+  getSignedDownloadUrl,
+  uploadObject
+} from "../lib/objectStorage"
 
 const router = Router()
 const EXERCISE_DAILY_POINTS_CAP = 200
@@ -12,11 +17,13 @@ const EXERCISE_DAILY_XP_CAP = 100
 type ChoiceOption = {
   id: string
   text: string
+  imageUrl?: string | null
 }
 
 type MultipleChoiceQuestion = {
   id: string
   prompt: string
+  promptImageUrl?: string | null
   options: ChoiceOption[]
   correctOptionId: string
 }
@@ -31,6 +38,9 @@ type CodingTask = {
   sampleOutput1: string
   sampleInput2: string
   sampleOutput2: string
+  answerMode?: "TEXT" | "SCRATCH_FILE"
+  descriptionImageUrl?: string | null
+  referenceImageUrls?: string[]
   placeholder?: string | null
 }
 
@@ -53,7 +63,14 @@ type ChoiceTeacherFeedback = {
 
 type CodingSubmissionAnswer = {
   taskId: string
-  answer: string
+  answer?: string
+  scratchFile?: {
+    objectKey: string
+    fileName: string
+    mimeType: string
+    size: number
+    downloadUrl: string
+  } | null
 }
 
 function computePointWeights(multipleChoiceCount: number, codingTaskCount: number) {
@@ -89,6 +106,17 @@ const asInt = (value: unknown) => {
     if (Number.isInteger(parsed)) return parsed
   }
   return NaN
+}
+
+function decodeDataUrl(input: string) {
+  const match = input.match(/^data:([^;,]+)?;base64,(.+)$/)
+  if (!match) {
+    throw new Error("content must be a base64 data URL")
+  }
+  return {
+    mimeType: match[1] || "application/octet-stream",
+    buffer: Buffer.from(match[2], "base64")
+  }
 }
 
 function computeExercisePointReward(input: {
@@ -129,7 +157,13 @@ function shanghaiDayRange(now = new Date()) {
 function isChoiceOption(value: unknown): value is ChoiceOption {
   if (!value || typeof value !== "object") return false
   const item = value as Record<string, unknown>
-  return typeof item.id === "string" && typeof item.text === "string"
+  return (
+    typeof item.id === "string" &&
+    typeof item.text === "string" &&
+    (item.imageUrl === undefined ||
+      item.imageUrl === null ||
+      typeof item.imageUrl === "string")
+  )
 }
 
 function isMultipleChoiceQuestion(
@@ -141,6 +175,9 @@ function isMultipleChoiceQuestion(
     typeof item.id !== "string" ||
     typeof item.prompt !== "string" ||
     typeof item.correctOptionId !== "string" ||
+    (item.promptImageUrl !== undefined &&
+      item.promptImageUrl !== null &&
+      typeof item.promptImageUrl !== "string") ||
     !Array.isArray(item.options)
   ) {
     return false
@@ -162,6 +199,15 @@ function isCodingTask(value: unknown): value is CodingTask {
     typeof item.sampleOutput1 === "string" &&
     typeof item.sampleInput2 === "string" &&
     typeof item.sampleOutput2 === "string" &&
+    (item.answerMode === undefined ||
+      item.answerMode === "TEXT" ||
+      item.answerMode === "SCRATCH_FILE") &&
+    (item.descriptionImageUrl === undefined ||
+      item.descriptionImageUrl === null ||
+      typeof item.descriptionImageUrl === "string") &&
+    (item.referenceImageUrls === undefined ||
+      (Array.isArray(item.referenceImageUrls) &&
+        item.referenceImageUrls.every(url => typeof url === "string"))) &&
     (item.placeholder === undefined ||
       item.placeholder === null ||
       typeof item.placeholder === "string")
@@ -175,7 +221,13 @@ function parseMultipleChoice(value: unknown): MultipleChoiceQuestion[] | null {
   for (const question of value) {
     if (!question.id.trim() || !question.prompt.trim()) return null
     if (question.options.length < 2) return null
-    if (question.options.some(option => !option.id.trim() || !option.text.trim())) {
+    if (
+      question.options.some(
+        option =>
+          !option.id.trim() ||
+          (!option.text.trim() && !(option.imageUrl && option.imageUrl.trim()))
+      )
+    ) {
       return null
     }
     const optionIds = new Set(question.options.map(option => option.id))
@@ -218,6 +270,9 @@ function parseCodingTasks(
 
   for (const task of value) {
     if (!task.id.trim() || !task.title.trim() || !task.description.trim()) return null
+    if (task.answerMode && task.answerMode !== "TEXT" && task.answerMode !== "SCRATCH_FILE") {
+      return null
+    }
   }
 
   return value
@@ -247,10 +302,36 @@ function parseCodingSubmissionAnswers(value: unknown): CodingSubmissionAnswer[] 
     if (!item || typeof item !== "object") return null
     const answer = item as Record<string, unknown>
     const taskId = asString(answer.taskId)
+    if (!taskId) return null
+
     const content = typeof answer.answer === "string" ? answer.answer.trim() : ""
-    if (!taskId || !content) return null
+    const scratchFileRaw =
+      answer.scratchFile && typeof answer.scratchFile === "object"
+        ? (answer.scratchFile as Record<string, unknown>)
+        : null
+    const scratchFile =
+      scratchFileRaw &&
+      typeof scratchFileRaw.objectKey === "string" &&
+      typeof scratchFileRaw.fileName === "string" &&
+      typeof scratchFileRaw.mimeType === "string" &&
+      typeof scratchFileRaw.size === "number" &&
+      typeof scratchFileRaw.downloadUrl === "string"
+        ? {
+            objectKey: scratchFileRaw.objectKey.trim(),
+            fileName: scratchFileRaw.fileName.trim(),
+            mimeType: scratchFileRaw.mimeType.trim(),
+            size: Math.max(0, Math.floor(scratchFileRaw.size)),
+            downloadUrl: scratchFileRaw.downloadUrl.trim()
+          }
+        : null
+
+    if (!content && !scratchFile) return null
     if (content.length > 20000) return null
-    parsed.push({ taskId, answer: content })
+    parsed.push({
+      taskId,
+      answer: content || undefined,
+      scratchFile
+    })
   }
 
   return parsed
@@ -279,8 +360,25 @@ function parseStoredCodingAnswers(value: unknown) {
     const taskId = asString(answer.taskId)
     const title = asString(answer.title)
     const content = typeof answer.answer === "string" ? answer.answer : ""
+    const scratchFile =
+      answer.scratchFile &&
+      typeof answer.scratchFile === "object" &&
+      typeof (answer.scratchFile as Record<string, unknown>).objectKey === "string"
+        ? {
+            objectKey: asString((answer.scratchFile as Record<string, unknown>).objectKey),
+            fileName: asString((answer.scratchFile as Record<string, unknown>).fileName),
+            mimeType: asString((answer.scratchFile as Record<string, unknown>).mimeType),
+            size:
+              typeof (answer.scratchFile as Record<string, unknown>).size === "number"
+                ? Math.max(0, Math.floor((answer.scratchFile as Record<string, unknown>).size as number))
+                : 0,
+            downloadUrl: getSignedDownloadUrl(
+              asString((answer.scratchFile as Record<string, unknown>).objectKey)
+            )
+          }
+        : null
     if (!taskId) return []
-    return [{ taskId, title, answer: content }]
+    return [{ taskId, title, answer: content, scratchFile }]
   })
 }
 
@@ -311,6 +409,9 @@ function serializeExerciseBank(bank: {
   title: string
   summary: string | null
   imageUrl: string | null
+  subject: "CPP" | "SCRATCH"
+  difficultyType: "LEVEL" | "OTHER"
+  difficultyLevel: number | null
   level: number
   multipleChoice: unknown
   codingTasks: unknown
@@ -332,6 +433,9 @@ function serializeExerciseBank(bank: {
     title: bank.title,
     summary: bank.summary,
     imageUrl: bank.imageUrl,
+    subject: bank.subject,
+    difficultyType: bank.difficultyType,
+    difficultyLevel: bank.difficultyLevel,
     level: bank.level,
     multipleChoice,
     codingTasks
@@ -340,18 +444,32 @@ function serializeExerciseBank(bank: {
 
 router.get("/", requireStudent, async (req: any, res) => {
   const level = req.query?.level === undefined ? NaN : asInt(req.query.level)
+  const subject = req.query?.subject === "SCRATCH" ? "SCRATCH" : req.query?.subject === "CPP" ? "CPP" : ""
+  const difficultyType =
+    req.query?.difficultyType === "OTHER"
+      ? "OTHER"
+      : req.query?.difficultyType === "LEVEL"
+        ? "LEVEL"
+        : ""
   const exerciseBanks = await prisma.exerciseBank.findMany({
     where: {
       isPublished: true,
-      ...(Number.isInteger(level) ? { level } : {})
+      ...(subject ? { subject } : {}),
+      ...(difficultyType ? { difficultyType } : {}),
+      ...(Number.isInteger(level)
+        ? { difficultyType: "LEVEL", difficultyLevel: level }
+        : {})
     },
-    orderBy: [{ level: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ difficultyType: "asc" }, { difficultyLevel: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
       slug: true,
       title: true,
       summary: true,
       imageUrl: true,
+      subject: true,
+      difficultyType: true,
+      difficultyLevel: true,
       level: true,
       multipleChoice: true,
       codingTasks: true,
@@ -371,6 +489,9 @@ router.get("/", requireStudent, async (req: any, res) => {
         title: bank.title,
         summary: bank.summary,
         imageUrl: bank.imageUrl,
+        subject: bank.subject,
+        difficultyType: bank.difficultyType,
+        difficultyLevel: bank.difficultyLevel,
         level: bank.level,
         multipleChoiceCount: serialized?.multipleChoice.length ?? 0,
         codingTaskCount: serialized?.codingTasks.length ?? 0,
@@ -393,6 +514,9 @@ router.get("/:slug", requireStudent, async (req, res) => {
       title: true,
       summary: true,
       imageUrl: true,
+      subject: true,
+      difficultyType: true,
+      difficultyLevel: true,
       level: true,
       multipleChoice: true,
       codingTasks: true,
@@ -484,6 +608,9 @@ router.get("/:slug/submissions/:submissionId", requireStudent, async (req: any, 
       title: true,
       summary: true,
       imageUrl: true,
+      subject: true,
+      difficultyType: true,
+      difficultyLevel: true,
       level: true,
       multipleChoice: true,
       codingTasks: true,
@@ -547,6 +674,78 @@ router.get("/:slug/submissions/:submissionId", requireStudent, async (req: any, 
   })
 })
 
+router.post("/:slug/scratch-upload", requireStudent, async (req: any, res) => {
+  const slug = asString(req.params.slug)
+  const taskId = asString(req.body?.taskId)
+  const fileName = asString(req.body?.fileName)
+  const dataUrl = typeof req.body?.content === "string" ? req.body.content : ""
+  const mimeTypeRaw = asString(req.body?.mimeType)
+
+  if (!slug) return res.status(400).json({ error: "invalid slug" })
+  if (!taskId) return res.status(400).json({ error: "taskId is required" })
+  if (!fileName) return res.status(400).json({ error: "fileName is required" })
+  if (!dataUrl) return res.status(400).json({ error: "content is required" })
+
+  const bank = await prisma.exerciseBank.findFirst({
+    where: { slug, isPublished: true },
+    select: {
+      slug: true,
+      codingTasks: true,
+      codingTitle: true,
+      codingPrompt: true,
+      codingPlaceholder: true
+    }
+  })
+  if (!bank) return res.status(404).json({ error: "not found" })
+
+  const codingTasks = parseCodingTasks(bank.codingTasks, {
+    codingTitle: bank.codingTitle,
+    codingPrompt: bank.codingPrompt,
+    codingPlaceholder: bank.codingPlaceholder
+  })
+  if (!codingTasks) return res.status(500).json({ error: "exercise data is invalid" })
+
+  const task = codingTasks.find(item => item.id === taskId)
+  if (!task) return res.status(400).json({ error: "unknown taskId" })
+  if ((task.answerMode ?? "TEXT") !== "SCRATCH_FILE") {
+    return res.status(400).json({ error: "this task does not accept scratch files" })
+  }
+
+  let decoded: { mimeType: string; buffer: Buffer }
+  try {
+    decoded = decodeDataUrl(dataUrl)
+  } catch (error: unknown) {
+    return res.status(400).json({ error: error instanceof Error ? error.message : "invalid file content" })
+  }
+
+  if (decoded.buffer.byteLength > 25_000_000) {
+    return res.status(400).json({ error: "scratch file is too large" })
+  }
+
+  const objectKey = createExerciseScratchSubmissionObjectKey({
+    studentId: req.studentId as string,
+    slug: bank.slug,
+    taskId,
+    fileName
+  })
+  const uploaded = await uploadObject({
+    key: objectKey,
+    body: decoded.buffer,
+    contentType: mimeTypeRaw || decoded.mimeType
+  })
+
+  res.json({
+    ok: true,
+    file: {
+      objectKey: uploaded.key,
+      fileName,
+      mimeType: mimeTypeRaw || decoded.mimeType,
+      size: uploaded.size,
+      downloadUrl: getSignedDownloadUrl(uploaded.key)
+    }
+  })
+})
+
 router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
   const slug = asString(req.params.slug)
   const answers = parseSubmissionAnswers(req.body?.answers)
@@ -584,9 +783,9 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
   for (const answer of answers) {
     answerMap.set(answer.questionId, answer.selectedOptionId)
   }
-  const codingAnswerMap = new Map<string, string>()
+  const codingAnswerMap = new Map<string, CodingSubmissionAnswer>()
   for (const answer of codingAnswers) {
-    codingAnswerMap.set(answer.taskId, answer.answer)
+    codingAnswerMap.set(answer.taskId, answer)
   }
 
   if (answerMap.size !== multipleChoice.length) {
@@ -594,6 +793,19 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
   }
   if (codingAnswerMap.size !== codingTasks.length) {
     return res.status(400).json({ error: "all coding tasks must be answered" })
+  }
+  for (const task of codingTasks) {
+    const submitted = codingAnswerMap.get(task.id)
+    if (!submitted) {
+      return res.status(400).json({ error: "all coding tasks must be answered" })
+    }
+    if ((task.answerMode ?? "TEXT") === "SCRATCH_FILE") {
+      if (!submitted.scratchFile?.objectKey) {
+        return res.status(400).json({ error: "scratch file is required for this task" })
+      }
+    } else if (!(submitted.answer ?? "").trim()) {
+      return res.status(400).json({ error: "text answer is required for this task" })
+    }
   }
   if (multipleChoice.length + codingTasks.length === 0) {
     return res.status(400).json({ error: "exercise has no content" })
@@ -620,11 +832,16 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
     }
   })
 
-  const codingAnswerList = codingTasks.map(task => ({
-    taskId: task.id,
-    title: task.title,
-    answer: codingAnswerMap.get(task.id) ?? ""
-  }))
+  const codingAnswerList = codingTasks.map(task => {
+    const submitted = codingAnswerMap.get(task.id)
+    return {
+      taskId: task.id,
+      title: task.title,
+      answerMode: task.answerMode ?? "TEXT",
+      answer: submitted?.answer ?? "",
+      scratchFile: submitted?.scratchFile ?? null
+    }
+  })
   const weights = computePointWeights(multipleChoice.length, codingTasks.length)
   const multipleChoicePoints = Math.round(score * weights.choicePoints)
   const studentId = req.studentId as string
@@ -643,7 +860,13 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
         codingMaxPoints: weights.codingMaxPoints,
         totalPoints: multipleChoicePoints,
         totalMaxPoints: weights.totalMaxPoints,
-        codingAnswer: codingAnswerList.map(item => `${item.title}\n${item.answer}`).join("\n\n"),
+        codingAnswer: codingAnswerList
+          .map(item =>
+            item.answerMode === "SCRATCH_FILE"
+              ? `${item.title}\n[Scratch 文件] ${item.scratchFile?.fileName ?? "未命名"}`
+              : `${item.title}\n${item.answer}`
+          )
+          .join("\n\n"),
         codingAnswers: codingAnswerList
       },
       select: {

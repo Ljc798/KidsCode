@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "ExerciseBank_subject_difficultyType_difficultyLevel_isPublish_i" RENAME TO "ExerciseBank_subject_difficultyType_difficultyLevel_isPubli_idx";

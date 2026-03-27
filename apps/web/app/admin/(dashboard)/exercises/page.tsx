@@ -10,6 +10,9 @@ type ExerciseListItem = {
   title: string
   summary: string | null
   imageUrl: string | null
+  subject: "CPP" | "SCRATCH"
+  difficultyType: "LEVEL" | "OTHER"
+  difficultyLevel: number | null
   level: number
   isPublished: boolean
   updatedAt: string
@@ -78,10 +81,11 @@ export default function AdminExercisesPage() {
       <div className="mt-5 overflow-hidden rounded-2xl border border-black/10 dark:border-white/10">
         <div className="grid grid-cols-12 gap-2 bg-zinc-950/10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:bg-white/5 dark:text-zinc-200">
           <div className="col-span-4">题库</div>
-          <div className="col-span-1">等级</div>
+          <div className="col-span-1">科目</div>
+          <div className="col-span-1">难度</div>
           <div className="col-span-2">状态</div>
           <div className="col-span-2">提交数</div>
-          <div className="col-span-2">更新时间</div>
+          <div className="col-span-1">更新时间</div>
           <div className="col-span-1 text-right">操作</div>
         </div>
 
@@ -109,7 +113,10 @@ export default function AdminExercisesPage() {
                   </div>
                 </div>
                 <div className="col-span-1 text-zinc-700 dark:text-zinc-200">
-                  {item.level} 级
+                  {item.subject === "SCRATCH" ? "Scratch" : "C++"}
+                </div>
+                <div className="col-span-1 text-zinc-700 dark:text-zinc-200">
+                  {item.difficultyType === "OTHER" ? "其他" : `${item.difficultyLevel ?? item.level} 级`}
                 </div>
                 <div className="col-span-2 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
                   {item.isPublished ? "已发布" : "草稿"}
@@ -117,7 +124,7 @@ export default function AdminExercisesPage() {
                 <div className="col-span-2 text-zinc-700 dark:text-zinc-200">
                   {item.submissionsCount}
                 </div>
-                <div className="col-span-2 text-xs text-zinc-500 dark:text-zinc-400">
+                <div className="col-span-1 text-xs text-zinc-500 dark:text-zinc-400">
                   {new Date(item.updatedAt).toLocaleDateString()}
                 </div>
                 <div className="col-span-1 flex justify-end gap-2">

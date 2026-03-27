@@ -182,6 +182,9 @@ model ExerciseBank {
   title         String
   summary       String?
   imageUrl      String?
+  subject       ExerciseSubject @default(CPP)
+  difficultyType ExerciseDifficultyType @default(LEVEL)
+  difficultyLevel Int?
   level         Int
   multipleChoice Json
   codingTasks    Json?
@@ -195,7 +198,18 @@ model ExerciseBank {
   submissions ExerciseSubmission[]
 
   @@index([level, isPublished])
+  @@index([subject, difficultyType, difficultyLevel, isPublished])
   @@index([createdAt])
+}
+
+enum ExerciseSubject {
+  CPP
+  SCRATCH
+}
+
+enum ExerciseDifficultyType {
+  LEVEL
+  OTHER
 }
 
 model ExerciseSubmission {

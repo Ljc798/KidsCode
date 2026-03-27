@@ -9,11 +9,13 @@ import CodeEditor from "@/app/exercises/CodeEditor"
 type ChoiceOption = {
   id: string
   text: string
+  imageUrl?: string | null
 }
 
 type Question = {
   id: string
   prompt: string
+  promptImageUrl?: string | null
   options: ChoiceOption[]
 }
 
@@ -27,6 +29,9 @@ type CodingTask = {
   sampleOutput1: string
   sampleInput2: string
   sampleOutput2: string
+  answerMode?: "TEXT" | "SCRATCH_FILE"
+  descriptionImageUrl?: string | null
+  referenceImageUrls?: string[]
   placeholder?: string | null
 }
 
@@ -36,6 +41,9 @@ type ExerciseDetail = {
   title: string
   summary: string | null
   imageUrl: string | null
+  subject: "CPP" | "SCRATCH"
+  difficultyType: "LEVEL" | "OTHER"
+  difficultyLevel: number | null
   level: number
   multipleChoice: Question[]
   codingTasks: CodingTask[]
@@ -104,6 +112,13 @@ type SubmissionDetail = {
       taskId: string
       title: string
       answer: string
+      scratchFile?: {
+        objectKey: string
+        fileName: string
+        mimeType: string
+        size: number
+        downloadUrl: string
+      } | null
     }>
     multipleChoiceFeedback: Array<{
       questionId: string
@@ -115,6 +130,23 @@ type SubmissionDetail = {
     reviewedAt: string | null
   }
   exercise: ExerciseDetail
+}
+
+type ScratchUploadedFile = {
+  objectKey: string
+  fileName: string
+  mimeType: string
+  size: number
+  downloadUrl: string
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "")
+    reader.onerror = () => reject(new Error("读取文件失败"))
+    reader.readAsDataURL(file)
+  })
 }
 
 type Step =
@@ -182,9 +214,11 @@ export default function ExerciseDetailClient() {
   const [detail, setDetail] = useState<ExerciseDetail | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [codingAnswers, setCodingAnswers] = useState<Record<string, string>>({})
+  const [scratchFiles, setScratchFiles] = useState<Record<string, ScratchUploadedFile | null>>({})
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitResult, setSubmitResult] = useState<SubmissionResponse | null>(null)
   const [records, setRecords] = useState<SubmissionRecord[]>([])
@@ -215,6 +249,9 @@ export default function ExerciseDetailClient() {
           setMode("records")
         }
         setCurrentStepIndex(0)
+        setScratchFiles({})
+        setCodingAnswers({})
+        setAnswers({})
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "加载失败")
       } finally {
@@ -279,6 +316,11 @@ export default function ExerciseDetailClient() {
       item.answer
     ])
   )
+  const readonlyScratchFiles = Object.fromEntries(
+    (mode === "records" ? (activeRecord?.submission.codingAnswers ?? []) : [])
+      .filter(item => item.scratchFile)
+      .map(item => [item.taskId, item.scratchFile as ScratchUploadedFile])
+  )
   const readonlyChoiceFeedback = Object.fromEntries(
     (mode === "records" ? (activeRecord?.submission.multipleChoiceFeedback ?? []) : []).map(item => [
       item.questionId,
@@ -288,6 +330,7 @@ export default function ExerciseDetailClient() {
 
   const effectiveAnswers = mode === "records" ? readonlyChoiceAnswers : answers
   const effectiveCodingAnswers = mode === "records" ? readonlyCodingAnswers : codingAnswers
+  const effectiveScratchFiles = mode === "records" ? readonlyScratchFiles : scratchFiles
 
   const steps = useMemo<Step[]>(
     () =>
@@ -341,13 +384,6 @@ export default function ExerciseDetailClient() {
     }, 3500)
   }, [queryHighlight, mode, activeChoiceFeedback, activeTeacherFeedback, currentStepIndex, activeRecordId])
 
-  const choiceDone = exercise
-    ? exercise.multipleChoice.filter(item => effectiveAnswers[item.id]).length
-    : 0
-  const codingDone = exercise
-    ? exercise.codingTasks.filter(item => (effectiveCodingAnswers[item.id] ?? "").trim()).length
-    : 0
-
   const refreshRecords = async (nextActiveId?: string) => {
     const submissionRecords = await apiFetch<SubmissionRecord[]>(`/exercises/${slug}/submissions`)
     setRecords(submissionRecords)
@@ -364,14 +400,49 @@ export default function ExerciseDetailClient() {
     setCurrentStepIndex(index => Math.max(index - 1, 0))
   }
 
+  const uploadScratchAnswer = async (taskId: string, file: File) => {
+    if (!detail) return
+    setUploadingTaskId(taskId)
+    setError(null)
+    try {
+      const content = await readFileAsDataUrl(file)
+      const response = await apiFetch<{
+        ok: true
+        file: ScratchUploadedFile
+      }>(`/exercises/${detail.slug}/scratch-upload`, {
+        method: "POST",
+        body: JSON.stringify({
+          taskId,
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          content
+        })
+      })
+      setScratchFiles(current => ({
+        ...current,
+        [taskId]: response.file
+      }))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "上传 Scratch 文件失败")
+    } finally {
+      setUploadingTaskId(null)
+    }
+  }
+
   const handleSubmit = async () => {
     if (!detail) return
     if (detail.multipleChoice.some(item => !answers[item.id])) {
       setError("请先完成全部选择题。")
       return
     }
-    if (detail.codingTasks.some(item => !(codingAnswers[item.id] ?? "").trim())) {
-      setError("请先完成全部编程题。")
+    if (
+      detail.codingTasks.some(item =>
+        (item.answerMode ?? "TEXT") === "SCRATCH_FILE"
+          ? !scratchFiles[item.id]?.objectKey
+          : !(codingAnswers[item.id] ?? "").trim()
+      )
+    ) {
+      setError("请先完成全部编程题（Scratch 题需要先上传文件）。")
       return
     }
 
@@ -387,7 +458,8 @@ export default function ExerciseDetailClient() {
           })),
           codingAnswers: detail.codingTasks.map(task => ({
             taskId: task.id,
-            answer: codingAnswers[task.id] ?? ""
+            answer: (task.answerMode ?? "TEXT") === "SCRATCH_FILE" ? "" : codingAnswers[task.id] ?? "",
+            scratchFile: (task.answerMode ?? "TEXT") === "SCRATCH_FILE" ? scratchFiles[task.id] ?? null : null
           }))
         })
       })
@@ -431,7 +503,7 @@ export default function ExerciseDetailClient() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-amber-400/15 px-3 py-1 text-[11px] font-black tracking-[0.2em] text-amber-700 dark:text-amber-200">
-                  LEVEL {exercise.level}
+                  {exercise.subject === "SCRATCH" ? "SCRATCH" : "C++"} · {exercise.difficultyType === "OTHER" ? "其他" : `LEVEL ${exercise.difficultyLevel ?? exercise.level}`}
                 </span>
                 <span className="rounded-full bg-zinc-950/5 px-3 py-1 text-xs font-medium text-zinc-600 dark:bg-white/5 dark:text-zinc-300">
                   {exercise.multipleChoice.length} 选择
@@ -497,6 +569,13 @@ export default function ExerciseDetailClient() {
             <div className="mt-4">
               <PromptBlock text={currentStep.question.prompt} />
             </div>
+            {currentStep.question.promptImageUrl ? (
+              <img
+                src={currentStep.question.promptImageUrl}
+                alt="题干图片"
+                className="mt-4 max-h-80 w-full rounded-[1.2rem] border border-black/10 object-contain dark:border-white/10"
+              />
+            ) : null}
 
             <div className="mt-6 grid gap-3">
               {currentStep.question.options.map(option => {
@@ -527,6 +606,13 @@ export default function ExerciseDetailClient() {
                       isWrongSelected ? "!border-red-500 !bg-red-500/10 !text-red-700 dark:!text-red-200" : ""
                     ].join(" ")}
                   >
+                    {option.imageUrl ? (
+                      <img
+                        src={option.imageUrl}
+                        alt="选项图片"
+                        className="mb-3 max-h-52 w-full rounded-xl border border-current/20 object-contain"
+                      />
+                    ) : null}
                     <OptionText text={option.text} />
                   </button>
                 )
@@ -550,6 +636,25 @@ export default function ExerciseDetailClient() {
                   <div className="mt-2">
                     <PromptBlock text={currentStep.task.description} />
                   </div>
+                  {currentStep.task.descriptionImageUrl ? (
+                    <img
+                      src={currentStep.task.descriptionImageUrl}
+                      alt="题目描述图片"
+                      className="mt-3 max-h-72 w-full rounded-xl border border-black/10 object-contain dark:border-white/10"
+                    />
+                  ) : null}
+                  {(currentStep.task.referenceImageUrls ?? []).length > 0 ? (
+                    <div className="mt-3 grid gap-3">
+                      {(currentStep.task.referenceImageUrls ?? []).map((url, index) => (
+                        <img
+                          key={`${url}-${index}`}
+                          src={url}
+                          alt={`参考图 ${index + 1}`}
+                          className="max-h-72 w-full rounded-xl border border-black/10 object-contain dark:border-white/10"
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 {[
@@ -598,20 +703,66 @@ export default function ExerciseDetailClient() {
                 {isReviewMode ? "提交代码回看" : "代码编辑区"}
               </h3>
               <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                支持 `Tab` 缩进、括号/引号/尖括号自动补全，不提供编译运行。
+                {(currentStep.task.answerMode ?? "TEXT") === "SCRATCH_FILE"
+                  ? "该题为 Scratch 文件提交题，先上传 .sb3 文件，再提交整套答案。"
+                  : "支持 `Tab` 缩进、括号/引号/尖括号自动补全，不提供编译运行。"}
               </p>
-              <CodeEditor
-                value={effectiveCodingAnswers[currentStep.task.id] ?? ""}
-                onChange={value =>
-                  setCodingAnswers(current => ({
-                    ...current,
-                    [currentStep.task.id]: value
-                  }))
-                }
-                readOnly={isReviewMode}
-                placeholder={currentStep.task.placeholder || "在这里写你的代码..."}
-                className="mt-5 min-h-[560px] w-full rounded-[1.6rem] border border-black/10 bg-white px-4 py-4 font-mono text-[13px] leading-6 text-zinc-900 outline-none focus:border-zinc-950 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-100 dark:focus:border-white"
-              />
+              {(currentStep.task.answerMode ?? "TEXT") === "SCRATCH_FILE" ? (
+                <div className="mt-5 space-y-3 rounded-[1.2rem] border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-zinc-950/40">
+                  {!isReviewMode ? (
+                    <label className="block cursor-pointer rounded-xl border border-dashed border-black/20 bg-white px-4 py-4 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/20 dark:bg-zinc-950/60 dark:text-zinc-200 dark:hover:bg-white/5">
+                      选择 Scratch 文件（.sb3）
+                      <input
+                        type="file"
+                        accept=".sb3,.sb2,.sb,application/octet-stream"
+                        className="mt-2 block w-full text-xs"
+                        onChange={async event => {
+                          const file = event.target.files?.[0]
+                          if (!file) return
+                          await uploadScratchAnswer(currentStep.task.id, file)
+                          event.currentTarget.value = ""
+                        }}
+                        disabled={Boolean(submitResult) || Boolean(uploadingTaskId)}
+                      />
+                    </label>
+                  ) : null}
+                  {effectiveScratchFiles[currentStep.task.id] ? (
+                    <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-200">
+                      已上传：{effectiveScratchFiles[currentStep.task.id]?.fileName}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-200">
+                      尚未上传 Scratch 文件
+                    </div>
+                  )}
+                  {effectiveScratchFiles[currentStep.task.id]?.downloadUrl ? (
+                    <a
+                      href={effectiveScratchFiles[currentStep.task.id]?.downloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex rounded-full border border-black/10 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
+                    >
+                      下载已上传文件
+                    </a>
+                  ) : null}
+                  {uploadingTaskId === currentStep.task.id ? (
+                    <div className="text-xs text-sky-700 dark:text-sky-300">上传中...</div>
+                  ) : null}
+                </div>
+              ) : (
+                <CodeEditor
+                  value={effectiveCodingAnswers[currentStep.task.id] ?? ""}
+                  onChange={value =>
+                    setCodingAnswers(current => ({
+                      ...current,
+                      [currentStep.task.id]: value
+                    }))
+                  }
+                  readOnly={isReviewMode}
+                  placeholder={currentStep.task.placeholder || "在这里写你的代码..."}
+                  className="mt-5 min-h-[560px] w-full rounded-[1.6rem] border border-black/10 bg-white px-4 py-4 font-mono text-[13px] leading-6 text-zinc-900 outline-none focus:border-zinc-950 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-100 dark:focus:border-white"
+                />
+              )}
             </div>
           </div>
         )}
@@ -729,7 +880,11 @@ export default function ExerciseDetailClient() {
                 } else if (effectiveAnswers[step.question.id]) {
                   tone = "border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950"
                 }
-              } else if ((effectiveCodingAnswers[step.task.id] ?? "").trim()) {
+              } else if (
+                (step.task.answerMode ?? "TEXT") === "SCRATCH_FILE"
+                  ? Boolean(effectiveScratchFiles[step.task.id]?.objectKey)
+                  : (effectiveCodingAnswers[step.task.id] ?? "").trim()
+              ) {
                 tone = "border-teal-500 bg-teal-500 text-white"
               }
 

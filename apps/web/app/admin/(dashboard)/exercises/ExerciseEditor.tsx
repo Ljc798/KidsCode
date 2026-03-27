@@ -8,7 +8,8 @@ import { apiFetch } from "@/app/lib/api"
 type MultipleChoiceQuestion = {
   id: string
   prompt: string
-  options: { id: string; text: string }[]
+  promptImageUrl?: string | null
+  options: { id: string; text: string; imageUrl?: string | null }[]
   correctOptionId: string
 }
 
@@ -22,6 +23,9 @@ type CodingTask = {
   sampleOutput1: string
   sampleInput2: string
   sampleOutput2: string
+  answerMode?: "TEXT" | "SCRATCH_FILE"
+  descriptionImageUrl?: string | null
+  referenceImageUrls?: string[]
   placeholder?: string | null
 }
 
@@ -31,6 +35,9 @@ type ExerciseBankDetail = {
   title: string
   summary: string | null
   imageUrl: string | null
+  subject: "CPP" | "SCRATCH"
+  difficultyType: "LEVEL" | "OTHER"
+  difficultyLevel: number | null
   level: number
   multipleChoice: MultipleChoiceQuestion[]
   codingTasks: CodingTask[]
@@ -42,7 +49,9 @@ type FormState = {
   title: string
   summary: string
   imageUrl: string
-  level: string
+  subject: "CPP" | "SCRATCH"
+  difficultyType: "LEVEL" | "OTHER"
+  difficultyLevel: string
   isPublished: boolean
   multipleChoice: MultipleChoiceQuestion[]
   codingTasks: CodingTask[]
@@ -54,6 +63,15 @@ function nextId(prefix: string) {
   return `${prefix}-${Date.now()}-${uid}`
 }
 
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "")
+    reader.onerror = () => reject(new Error("读取文件失败"))
+    reader.readAsDataURL(file)
+  })
+}
+
 function createChoiceQuestion(): MultipleChoiceQuestion {
   const qid = nextId("q")
   const options = Array.from({ length: 4 }, (_, index) => ({
@@ -63,6 +81,7 @@ function createChoiceQuestion(): MultipleChoiceQuestion {
   return {
     id: qid,
     prompt: "",
+    promptImageUrl: "",
     options,
     correctOptionId: options[0].id
   }
@@ -79,6 +98,9 @@ function createCodingTask(): CodingTask {
     sampleOutput1: "",
     sampleInput2: "",
     sampleOutput2: "",
+    answerMode: "TEXT",
+    descriptionImageUrl: "",
+    referenceImageUrls: [],
     placeholder: ""
   }
 }
@@ -88,7 +110,9 @@ const emptyForm = (): FormState => ({
   title: "",
   summary: "",
   imageUrl: "",
-  level: "1",
+  subject: "CPP",
+  difficultyType: "LEVEL",
+  difficultyLevel: "1",
   isPublished: true,
   multipleChoice: [createChoiceQuestion()],
   codingTasks: [createCodingTask()]
@@ -104,6 +128,7 @@ export default function ExerciseEditor({
   const [loading, setLoading] = useState(Boolean(exerciseId))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (!exerciseId) return
@@ -118,7 +143,9 @@ export default function ExerciseEditor({
           title: data.title,
           summary: data.summary ?? "",
           imageUrl: data.imageUrl ?? "",
-          level: String(data.level),
+          subject: data.subject ?? "CPP",
+          difficultyType: data.difficultyType ?? "LEVEL",
+          difficultyLevel: String(data.difficultyLevel ?? data.level ?? 1),
           isPublished: data.isPublished,
           multipleChoice: data.multipleChoice,
           codingTasks: data.codingTasks
@@ -138,9 +165,12 @@ export default function ExerciseEditor({
     setSaving(true)
     setError(null)
     try {
+      const levelValue =
+        form.difficultyType === "LEVEL" ? Number(form.difficultyLevel || "1") : 0
       const payload = {
         ...form,
-        level: Number(form.level)
+        level: levelValue,
+        difficultyLevel: form.difficultyType === "LEVEL" ? levelValue : undefined
       }
       if (exerciseId) {
         await apiFetch(`/admin/exercises/${exerciseId}`, {
@@ -184,6 +214,41 @@ export default function ExerciseEditor({
     }))
   }
 
+  const uploadAsset = async (
+    targetKey: string,
+    questionId: string,
+    file: File,
+    applyUrl: (url: string) => void
+  ) => {
+    setUploadingKey(targetKey)
+    setError(null)
+    try {
+      const content = await readFileAsDataUrl(file)
+      const response = await apiFetch<{
+        ok: true
+        file: { url: string }
+      }>("/admin/exercises/asset-upload", {
+        method: "POST",
+        body: JSON.stringify({
+          subject: form.subject,
+          difficultyType: form.difficultyType,
+          difficultyLevel:
+            form.difficultyType === "LEVEL" ? Number(form.difficultyLevel || 1) : undefined,
+          slug: form.slug || form.title || "exercise",
+          questionId,
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          content
+        })
+      })
+      applyUrl(response.file.url)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "上传图片失败")
+    } finally {
+      setUploadingKey(null)
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-black/5 bg-white/75 p-6 shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-950/60">
       <div className="flex items-end justify-between gap-4">
@@ -206,6 +271,11 @@ export default function ExerciseEditor({
       {error ? (
         <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-700 dark:text-red-200">
           {error}
+        </div>
+      ) : null}
+      {uploadingKey ? (
+        <div className="mt-4 rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 text-sm text-sky-700 dark:text-sky-200">
+          正在上传资源到 COS...
         </div>
       ) : null}
 
@@ -234,7 +304,7 @@ export default function ExerciseEditor({
             </label>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[1fr_160px_180px]">
+          <div className="grid gap-4 lg:grid-cols-[1fr_160px_160px_180px]">
             <label className="grid gap-1 text-sm">
               <span className="font-semibold text-zinc-800 dark:text-zinc-200">封面图片 URL</span>
               <input
@@ -244,10 +314,46 @@ export default function ExerciseEditor({
               />
             </label>
             <label className="grid gap-1 text-sm">
-              <span className="font-semibold text-zinc-800 dark:text-zinc-200">等级</span>
+              <span className="font-semibold text-zinc-800 dark:text-zinc-200">科目</span>
               <select
-                value={form.level}
-                onChange={event => setForm(current => ({ ...current, level: event.target.value }))}
+                value={form.subject}
+                onChange={event =>
+                  setForm(current => ({
+                    ...current,
+                    subject: event.target.value === "SCRATCH" ? "SCRATCH" : "CPP"
+                  }))
+                }
+                className="h-10 rounded-xl border border-black/10 bg-white/70 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/40"
+              >
+                <option value="CPP">C++</option>
+                <option value="SCRATCH">Scratch</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="font-semibold text-zinc-800 dark:text-zinc-200">难度</span>
+              <select
+                value={
+                  form.difficultyType === "OTHER"
+                    ? "OTHER"
+                    : form.difficultyLevel || "1"
+                }
+                onChange={event =>
+                  setForm(current => {
+                    const next = event.target.value
+                    if (next === "OTHER") {
+                      return {
+                        ...current,
+                        difficultyType: "OTHER",
+                        difficultyLevel: "0"
+                      }
+                    }
+                    return {
+                      ...current,
+                      difficultyType: "LEVEL",
+                      difficultyLevel: next
+                    }
+                  })
+                }
                 className="h-10 rounded-xl border border-black/10 bg-white/70 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-900/40"
               >
                 {Array.from({ length: 18 }, (_, index) => (
@@ -255,6 +361,7 @@ export default function ExerciseEditor({
                     {index + 1} 级
                   </option>
                 ))}
+                <option value="OTHER">其他</option>
               </select>
             </label>
             <label className="flex items-center gap-3 rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-sm dark:border-white/10 dark:bg-zinc-900/40">
@@ -332,6 +439,51 @@ export default function ExerciseEditor({
                     required
                   />
                 </label>
+                <div className="mt-3 grid gap-2 text-sm">
+                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">题干图片 URL（可选）</span>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      value={question.promptImageUrl ?? ""}
+                      onChange={event =>
+                        updateQuestion(question.id, current => ({
+                          ...current,
+                          promptImageUrl: event.target.value
+                        }))
+                      }
+                      className="h-10 min-w-[220px] flex-1 rounded-xl border border-black/10 bg-white/80 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                    />
+                    <label className="inline-flex h-10 cursor-pointer items-center rounded-xl border border-black/10 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5">
+                      上传到 COS
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async event => {
+                          const file = event.target.files?.[0]
+                          if (!file) return
+                          await uploadAsset(
+                            `q-${question.id}-prompt`,
+                            `${question.id}-prompt`,
+                            file,
+                            url =>
+                              updateQuestion(question.id, current => ({
+                                ...current,
+                                promptImageUrl: url
+                              }))
+                          )
+                          event.currentTarget.value = ""
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {question.promptImageUrl ? (
+                    <img
+                      src={question.promptImageUrl}
+                      alt="题干图片预览"
+                      className="max-h-56 rounded-xl border border-black/10 object-contain dark:border-white/10"
+                    />
+                  ) : null}
+                </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   {question.options.map((option, optionIndex) => (
@@ -350,8 +502,54 @@ export default function ExerciseEditor({
                           }))
                         }
                         className="h-10 rounded-xl border border-black/10 bg-white/80 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
-                        required
                       />
+                      <div className="flex flex-wrap gap-2">
+                        <input
+                          value={option.imageUrl ?? ""}
+                          onChange={event =>
+                            updateQuestion(question.id, current => ({
+                              ...current,
+                              options: current.options.map(item =>
+                                item.id === option.id ? { ...item, imageUrl: event.target.value } : item
+                              )
+                            }))
+                          }
+                          placeholder="选项图片 URL（可选）"
+                          className="h-10 min-w-[220px] flex-1 rounded-xl border border-black/10 bg-white/80 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                        />
+                        <label className="inline-flex h-10 cursor-pointer items-center rounded-xl border border-black/10 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5">
+                          上传到 COS
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async event => {
+                              const file = event.target.files?.[0]
+                              if (!file) return
+                              await uploadAsset(
+                                `q-${question.id}-opt-${option.id}`,
+                                `${question.id}-option-${optionIndex + 1}`,
+                                file,
+                                url =>
+                                  updateQuestion(question.id, current => ({
+                                    ...current,
+                                    options: current.options.map(item =>
+                                      item.id === option.id ? { ...item, imageUrl: url } : item
+                                    )
+                                  }))
+                              )
+                              event.currentTarget.value = ""
+                            }}
+                          />
+                        </label>
+                      </div>
+                      {option.imageUrl ? (
+                        <img
+                          src={option.imageUrl}
+                          alt={`选项 ${optionIndex + 1} 图片`}
+                          className="max-h-40 rounded-xl border border-black/10 object-contain dark:border-white/10"
+                        />
+                      ) : null}
                     </label>
                   ))}
                 </div>
@@ -446,6 +644,77 @@ export default function ExerciseEditor({
                       }
                       className="min-h-28 rounded-xl border border-black/10 bg-white/80 px-3 py-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
                       required
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">作答方式</span>
+                    <select
+                      value={task.answerMode ?? "TEXT"}
+                      onChange={event =>
+                        updateCodingTask(task.id, current => ({
+                          ...current,
+                          answerMode:
+                            event.target.value === "SCRATCH_FILE" ? "SCRATCH_FILE" : "TEXT"
+                        }))
+                      }
+                      className="h-10 rounded-xl border border-black/10 bg-white/80 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                    >
+                      <option value="TEXT">文本代码输入</option>
+                      <option value="SCRATCH_FILE">上传 Scratch 文件(.sb3)</option>
+                    </select>
+                  </label>
+                  <div className="grid gap-2 text-sm">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">描述图片 URL（可选）</span>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        value={task.descriptionImageUrl ?? ""}
+                        onChange={event =>
+                          updateCodingTask(task.id, current => ({
+                            ...current,
+                            descriptionImageUrl: event.target.value
+                          }))
+                        }
+                        className="h-10 min-w-[220px] flex-1 rounded-xl border border-black/10 bg-white/80 px-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                      />
+                      <label className="inline-flex h-10 cursor-pointer items-center rounded-xl border border-black/10 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5">
+                        上传到 COS
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async event => {
+                            const file = event.target.files?.[0]
+                            if (!file) return
+                            await uploadAsset(
+                              `coding-${task.id}-desc`,
+                              `${task.id}-desc`,
+                              file,
+                              url =>
+                                updateCodingTask(task.id, current => ({
+                                  ...current,
+                                  descriptionImageUrl: url
+                                }))
+                            )
+                            event.currentTarget.value = ""
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">参考图片 URL（每行一个，可选）</span>
+                    <textarea
+                      value={(task.referenceImageUrls ?? []).join("\n")}
+                      onChange={event =>
+                        updateCodingTask(task.id, current => ({
+                          ...current,
+                          referenceImageUrls: event.target.value
+                            .split("\n")
+                            .map(line => line.trim())
+                            .filter(Boolean)
+                        }))
+                      }
+                      className="min-h-24 rounded-xl border border-black/10 bg-white/80 px-3 py-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
                     />
                   </label>
                   <div className="grid gap-4 lg:grid-cols-2">
