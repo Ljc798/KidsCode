@@ -177,6 +177,19 @@ function parseMultipleChoice(
   const allowImageOnlyOption = options?.allowImageOnlyOption === true
 
   for (const question of value) {
+    const rawQuestion = question as Record<string, unknown>
+    const legacyPromptImageCandidates = [
+      rawQuestion.promptImage,
+      rawQuestion.promptImg,
+      rawQuestion.prompt_image
+    ]
+    const legacyPromptImage = legacyPromptImageCandidates
+      .find(item => typeof item === "string" && item.trim()) as string | undefined
+    if (!question.promptImageUrl && legacyPromptImage) {
+      ;(question as MultipleChoiceQuestion & { promptImageUrl?: string | null }).promptImageUrl =
+        legacyPromptImage.trim()
+    }
+
     if (!question.id.trim() || !question.prompt.trim()) return null
     if (question.options.length < 2) return null
     if (

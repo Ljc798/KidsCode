@@ -584,7 +584,7 @@ export default function ExerciseDetailClient() {
             <div className="mt-4">
               <PromptBlock text={currentStep.question.prompt} />
             </div>
-            {exercise.subject === "SCRATCH" && currentStep.question.promptImageUrl ? (
+            {currentStep.question.promptImageUrl ? (
               <img
                 src={normalizeMediaUrl(currentStep.question.promptImageUrl)}
                 alt="题干图片"
@@ -621,7 +621,7 @@ export default function ExerciseDetailClient() {
                       isWrongSelected ? "!border-red-500 !bg-red-500/10 !text-red-700 dark:!text-red-200" : ""
                     ].join(" ")}
                   >
-                    {exercise.subject === "SCRATCH" && option.imageUrl ? (
+                    {option.imageUrl ? (
                       <img
                         src={normalizeMediaUrl(option.imageUrl)}
                         alt="选项图片"
@@ -651,14 +651,14 @@ export default function ExerciseDetailClient() {
                   <div className="mt-2">
                     <PromptBlock text={currentStep.task.description} />
                   </div>
-                  {exercise.subject === "SCRATCH" && currentStep.task.descriptionImageUrl ? (
+                  {currentStep.task.descriptionImageUrl ? (
                     <img
                       src={normalizeMediaUrl(currentStep.task.descriptionImageUrl)}
                       alt="题目描述图片"
                       className="mt-3 max-h-72 w-full rounded-xl border border-black/10 object-contain dark:border-white/10"
                     />
                   ) : null}
-                  {exercise.subject === "SCRATCH" && (currentStep.task.referenceImageUrls ?? []).length > 0 ? (
+                  {(currentStep.task.referenceImageUrls ?? []).length > 0 ? (
                     <div className="mt-3 grid gap-3">
                       {(currentStep.task.referenceImageUrls ?? []).map((url, index) => (
                         <img
@@ -672,7 +672,7 @@ export default function ExerciseDetailClient() {
                   ) : null}
                 </div>
 
-                {exercise.subject === "SCRATCH" && (currentStep.task.materialRequirement ?? "").trim() ? (
+                {(currentStep.task.materialRequirement ?? "").trim() ? (
                   <div className="rounded-[1.3rem] border border-black/10 bg-white/70 p-4 dark:border-white/10 dark:bg-zinc-900/40">
                     <div className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
                       素材要求
@@ -683,7 +683,7 @@ export default function ExerciseDetailClient() {
                   </div>
                 ) : null}
 
-                {exercise.subject === "SCRATCH" && (currentStep.task.requirementSteps ?? []).length > 0 ? (
+                {(currentStep.task.requirementSteps ?? []).length > 0 ? (
                   <div className="rounded-[1.3rem] border border-black/10 bg-white/70 p-4 dark:border-white/10 dark:bg-zinc-900/40">
                     <div className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
                       具体要求（步骤）
@@ -713,7 +713,7 @@ export default function ExerciseDetailClient() {
                   </div>
                 ) : null}
 
-                {exercise.subject === "SCRATCH" && (currentStep.task.scoringRubric ?? "").trim() ? (
+                {(currentStep.task.scoringRubric ?? "").trim() ? (
                   <div className="rounded-[1.3rem] border border-black/10 bg-white/70 p-4 dark:border-white/10 dark:bg-zinc-900/40">
                     <div className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
                       评分标准
@@ -784,10 +784,11 @@ export default function ExerciseDetailClient() {
                         accept=".sb3,.sb2,.sb,application/octet-stream"
                         className="mt-2 block w-full text-xs"
                         onChange={async event => {
+                          const input = event.currentTarget
                           const file = event.target.files?.[0]
                           if (!file) return
                           await uploadScratchAnswer(currentStep.task.id, file)
-                          event.currentTarget.value = ""
+                          input.value = ""
                         }}
                         disabled={Boolean(submitResult) || Boolean(uploadingTaskId)}
                       />

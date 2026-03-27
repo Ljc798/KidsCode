@@ -271,6 +271,19 @@ function parseMultipleChoice(value: unknown): MultipleChoiceQuestion[] | null {
   if (!value.every(isMultipleChoiceQuestion)) return null
 
   for (const question of value) {
+    const rawQuestion = question as Record<string, unknown>
+    const legacyPromptImageCandidates = [
+      rawQuestion.promptImage,
+      rawQuestion.promptImg,
+      rawQuestion.prompt_image
+    ]
+    const legacyPromptImage = legacyPromptImageCandidates
+      .find(item => typeof item === "string" && item.trim()) as string | undefined
+    if (!question.promptImageUrl && legacyPromptImage) {
+      ;(question as MultipleChoiceQuestion & { promptImageUrl?: string | null }).promptImageUrl =
+        legacyPromptImage.trim()
+    }
+
     if (!question.id.trim() || !question.prompt.trim()) return null
     if (question.options.length < 2) return null
     if (question.options.some(option => !option.id.trim())) {
@@ -551,15 +564,16 @@ router.get("/", requireStudent, async (req: any, res) => {
   )
 })
 
-router.get("/assets/:encodedKey", requireStudentOrAdmin, async (req, res) => {
-  const encodedKey = asString(req.params.encodedKey)
-  if (!encodedKey) return res.status(400).json({ error: "invalid key" })
+router.get(/^\/assets\/(.+)$/, requireStudentOrAdmin, async (req, res) => {
+  const rawMatched = typeof req.params?.[0] === "string" ? req.params[0] : ""
+  if (!rawMatched) return res.status(400).json({ error: "invalid key" })
 
   let key = ""
   try {
-    key = decodeURIComponent(encodedKey)
+    // Support both encoded and already-decoded keys.
+    key = decodeURIComponent(rawMatched)
   } catch {
-    return res.status(400).json({ error: "invalid key" })
+    key = rawMatched
   }
   if (!key || key.includes("..")) {
     return res.status(400).json({ error: "invalid key" })
@@ -614,6 +628,7 @@ router.get("/:slug", requireStudent, async (req, res) => {
     multipleChoice: serialized.multipleChoice.map(question => ({
       id: question.id,
       prompt: question.prompt,
+      promptImageUrl: question.promptImageUrl ?? null,
       options: shuffle(question.options)
     }))
   })

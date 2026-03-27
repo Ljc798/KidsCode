@@ -470,6 +470,7 @@ export default function ExerciseEditor({
                         accept="image/*"
                         className="hidden"
                         onChange={async event => {
+                          const input = event.currentTarget
                           const file = event.target.files?.[0]
                           if (!file) return
                           await uploadAsset(
@@ -482,7 +483,7 @@ export default function ExerciseEditor({
                                 promptImageUrl: url
                               }))
                           )
-                          event.currentTarget.value = ""
+                          input.value = ""
                         }}
                       />
                     </label>
@@ -539,6 +540,7 @@ export default function ExerciseEditor({
                             accept="image/*"
                             className="hidden"
                             onChange={async event => {
+                              const input = event.currentTarget
                               const file = event.target.files?.[0]
                               if (!file) return
                               await uploadAsset(
@@ -553,7 +555,7 @@ export default function ExerciseEditor({
                                     )
                                   }))
                               )
-                              event.currentTarget.value = ""
+                              input.value = ""
                             }}
                           />
                         </label>
@@ -796,6 +798,7 @@ export default function ExerciseEditor({
                                   accept="image/*"
                                   className="hidden"
                                   onChange={async event => {
+                                    const input = event.currentTarget
                                     const file = event.target.files?.[0]
                                     if (!file) return
                                     await uploadAsset(
@@ -810,7 +813,7 @@ export default function ExerciseEditor({
                                           )
                                         }))
                                     )
-                                    event.currentTarget.value = ""
+                                    input.value = ""
                                   }}
                                 />
                               </label>
@@ -842,6 +845,7 @@ export default function ExerciseEditor({
                           accept="image/*"
                           className="hidden"
                           onChange={async event => {
+                            const input = event.currentTarget
                             const file = event.target.files?.[0]
                             if (!file) return
                             await uploadAsset(
@@ -854,7 +858,7 @@ export default function ExerciseEditor({
                                   descriptionImageUrl: url
                                 }))
                             )
-                            event.currentTarget.value = ""
+                            input.value = ""
                           }}
                         />
                       </label>
