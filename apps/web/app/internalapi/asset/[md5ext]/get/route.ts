@@ -4,14 +4,14 @@ import path from "node:path"
 
 export const runtime = "nodejs"
 
-const DEFAULT_UPSTREAMS = ["https://assets.scratch.mit.edu", "https://cdn.assets.scratch.mit.edu"]
 const ENV_UPSTREAMS = (process.env.SCRATCH_ASSET_UPSTREAMS || "")
   .split(",")
   .map(item => item.trim().replace(/\/+$/, ""))
   .filter(Boolean)
-const INTERNAL_API_UPSTREAMS = ENV_UPSTREAMS.length > 0 ? ENV_UPSTREAMS : DEFAULT_UPSTREAMS
+const INTERNAL_API_UPSTREAMS = ENV_UPSTREAMS.length > 0 ? ENV_UPSTREAMS : []
 const DIRECT_FILE_UPSTREAMS = INTERNAL_API_UPSTREAMS
 const CACHE_DIR = path.join(process.cwd(), ".next", "cache", "scratch-assets")
+const LOCAL_STATIC_ASSET_DIR = path.join(process.cwd(), "public", "scratch-gui", "static", "assets")
 
 function contentTypeByExt(name: string) {
   const ext = name.toLowerCase().split(".").pop() || ""
@@ -26,6 +26,26 @@ function contentTypeByExt(name: string) {
 }
 
 async function fetchAsset(md5ext: string) {
+  // Prefer local static assets shipped with the project.
+  try {
+    const localBuffer = await readFile(path.join(LOCAL_STATIC_ASSET_DIR, md5ext))
+    return {
+      ok: true as const,
+      data: localBuffer.buffer.slice(
+        localBuffer.byteOffset,
+        localBuffer.byteOffset + localBuffer.byteLength
+      ),
+      contentType: contentTypeByExt(md5ext),
+      etag: null
+    }
+  } catch {
+    // local miss
+  }
+
+  if (INTERNAL_API_UPSTREAMS.length === 0) {
+    return { ok: false as const, error: "no upstream configured (set SCRATCH_ASSET_UPSTREAMS)" }
+  }
+
   const internalApiPath = `/internalapi/asset/${encodeURIComponent(md5ext)}/get/`
   const directPath = `/${encodeURIComponent(md5ext)}`
   let lastError = "asset fetch failed"

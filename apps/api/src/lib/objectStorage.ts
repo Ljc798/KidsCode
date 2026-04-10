@@ -118,6 +118,27 @@ export function createExerciseScratchSubmissionObjectKey(input: {
   return `exercise-submissions/scratch/${safeStudentId}/${safeSlug}/${safeTaskId}/${Date.now()}-${safeFileName}`
 }
 
+export function createTeachingMaterialObjectKey(input: {
+  kind: "SCRATCH" | "CPP" | "ZIP"
+  title: string
+  fileName: string
+  weekTag?: string | null
+}) {
+  const kindSegment =
+    input.kind === "SCRATCH" ? "scratch" : input.kind === "ZIP" ? "zip" : "cpp"
+  const weekSegment = cleanPathSegment(input.weekTag ?? "", "general")
+  const safeTitle = cleanPathSegment(input.title, "material")
+  const safeFileName = cleanPathSegment(
+    ensureExtension(input.fileName, input.fileName),
+    input.kind === "SCRATCH"
+      ? "sample.sb3"
+      : input.kind === "ZIP"
+        ? "bundle.zip"
+        : "answer.cpp"
+  )
+  return `teaching-materials/${kindSegment}/${weekSegment}/${safeTitle}/${Date.now()}-${safeFileName}`
+}
+
 export async function uploadObject(params: UploadParams) {
   const config = getConfig()
   const client = createClient(config)

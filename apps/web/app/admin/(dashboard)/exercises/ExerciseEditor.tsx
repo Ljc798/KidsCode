@@ -9,6 +9,7 @@ type MultipleChoiceQuestion = {
   id: string
   prompt: string
   promptImageUrl?: string | null
+  explanation?: string | null
   options: { id: string; text: string; imageUrl?: string | null }[]
   correctOptionId: string
 }
@@ -89,6 +90,7 @@ function createChoiceQuestion(): MultipleChoiceQuestion {
     id: qid,
     prompt: "",
     promptImageUrl: "",
+    explanation: "",
     options,
     correctOptionId: options[0].id
   }
@@ -447,6 +449,20 @@ export default function ExerciseEditor({
                     }
                     className="min-h-20 rounded-xl border border-black/10 bg-white/80 px-3 py-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
                     required
+                  />
+                </label>
+                <label className="mt-3 grid gap-1 text-sm">
+                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">答案解析（可选）</span>
+                  <textarea
+                    value={question.explanation ?? ""}
+                    onChange={event =>
+                      updateQuestion(question.id, current => ({
+                        ...current,
+                        explanation: event.target.value
+                      }))
+                    }
+                    className="min-h-20 rounded-xl border border-black/10 bg-white/80 px-3 py-3 outline-none focus:border-black/20 dark:border-white/10 dark:bg-zinc-950/40"
+                    placeholder="例如：正确答案是 B，因为..."
                   />
                 </label>
                 {form.subject === "SCRATCH" ? (

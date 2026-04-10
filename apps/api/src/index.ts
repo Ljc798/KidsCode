@@ -2,6 +2,7 @@ import "./lib/loadEnv"
 import express from "express"
 import cors from "cors"
 import { createServer } from "node:http"
+import { prisma } from "@kidscode/database"
 import studentRoutes from "./routes/student.routes"
 import minigameRoutes from "./routes/minigame.routes"
 import knowledgeRoutes from "./routes/knowledge.routes"
@@ -15,6 +16,8 @@ import petRoutes from "./routes/pet.routes"
 import projectRoutes from "./routes/project.routes"
 import adminProjectReviewRoutes from "./routes/adminProjectReview.routes"
 import adminMinigameRoutes from "./routes/adminMinigame.routes"
+import adminMaterialRoutes from "./routes/adminMaterial.routes"
+import materialRoutes from "./routes/material.routes"
 import chatRoutes from "./routes/chat.routes"
 import { attachChatWs } from "./chatWs"
 
@@ -35,6 +38,8 @@ app.use("/exercises", exerciseRoutes)
 app.use("/admin/exercises", adminExerciseRoutes)
 app.use("/admin/exercise-reviews", adminExerciseReviewRoutes)
 app.use("/admin/minigames", adminMinigameRoutes)
+app.use("/admin/materials", adminMaterialRoutes)
+app.use("/materials", materialRoutes)
 app.use("/projects", projectRoutes)
 app.use("/admin/project-reviews", adminProjectReviewRoutes)
 app.use("/chat", chatRoutes)
@@ -42,6 +47,21 @@ app.use("/chat", chatRoutes)
 const server = createServer(app)
 attachChatWs(server)
 
-server.listen(3001, () => {
-  console.log("API running on http://localhost:3001")
-})
+async function start() {
+  try {
+    await prisma.$connect()
+  } catch (error) {
+    console.error("Failed to connect to PostgreSQL via Prisma.")
+    console.error(
+      "Start DB first: docker compose -f infrastructure/docker/docker-compose.yml up -d"
+    )
+    console.error(error)
+    process.exit(1)
+  }
+
+  server.listen(3001, () => {
+    console.log("API running on http://localhost:3001")
+  })
+}
+
+void start()

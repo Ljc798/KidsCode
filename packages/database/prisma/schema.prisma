@@ -230,6 +230,12 @@ model ExerciseSubmission {
   codingStatus        ExerciseCodingStatus @default(PENDING)
   codingIsCorrect     Boolean?
   teacherFeedback     String?
+  aiReviewStatus      ExerciseAiReviewStatus @default(PENDING)
+  aiSuggestedScore    Int?
+  aiSuggestedFeedback String?
+  aiSuggestionJson    Json?
+  aiWorkflowRunId     String?
+  aiReviewedAt        DateTime? @db.Timestamptz(3)
   createdAt           DateTime @default(now()) @db.Timestamptz(3)
   reviewedAt          DateTime? @db.Timestamptz(3)
 
@@ -239,11 +245,18 @@ model ExerciseSubmission {
   @@index([studentId, createdAt])
   @@index([exerciseBankId, createdAt])
   @@index([codingStatus, createdAt])
+  @@index([aiReviewStatus, createdAt])
 }
 
 enum ExerciseCodingStatus {
   PENDING
   REVIEWED
+}
+
+enum ExerciseAiReviewStatus {
+  PENDING
+  DONE
+  FAILED
 }
 
 enum ChatSenderRole {

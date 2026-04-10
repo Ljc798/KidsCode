@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import { apiFetch } from "@/app/lib/api"
 import CodeEditor from "@/app/exercises/CodeEditor"
@@ -16,6 +16,7 @@ type Question = {
   id: string
   prompt: string
   promptImageUrl?: string | null
+  explanation?: string | null
   options: ChoiceOption[]
 }
 
@@ -160,6 +161,58 @@ type Step =
   | { kind: "choice"; key: string; label: string; question: Question; order: number }
   | { kind: "coding"; key: string; label: string; task: CodingTask; order: number }
 
+function normalizeMediaUrl(url?: string | null) {
+  if (!url) return ""
+  if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("http://")) {
+    return `https://${url.slice("http://".length)}`
+  }
+  return url
+}
+
+function RichTextWithImages({ text }: { text: string }) {
+  const normalized = text.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n")
+  const regex = /!\[([^\]]*)\]\(([^)]+)\)/g
+  const nodes: ReactNode[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null = null
+  let key = 0
+
+  while ((match = regex.exec(normalized)) !== null) {
+    const prefix = normalized.slice(lastIndex, match.index)
+    if (prefix) {
+      nodes.push(
+        <div key={`text-${key++}`} className="whitespace-pre-wrap break-all">
+          {prefix}
+        </div>
+      )
+    }
+    const alt = (match[1] || "题目图片").trim() || "题目图片"
+    const src = normalizeMediaUrl((match[2] || "").trim())
+    if (src) {
+      nodes.push(
+        <img
+          key={`img-${key++}`}
+          src={src}
+          alt={alt}
+          className="my-2 ml-0 mr-auto block max-h-80 max-w-full rounded-xl border border-current/20 object-contain"
+        />
+      )
+    }
+    lastIndex = match.index + match[0].length
+  }
+
+  const suffix = normalized.slice(lastIndex)
+  if (suffix || nodes.length === 0) {
+    nodes.push(
+      <div key={`text-${key++}`} className="whitespace-pre-wrap break-all">
+        {suffix}
+      </div>
+    )
+  }
+
+  return <div className="space-y-2">{nodes}</div>
+}
+
 function PromptBlock({ text }: { text: string }) {
   const parts = text.split(/```/)
   return (
@@ -172,19 +225,14 @@ function PromptBlock({ text }: { text: string }) {
           >
             {part.trim()}
           </pre>
-        ) : (
-          <div key={index} className="whitespace-pre-wrap">
-            {part}
-          </div>
-        )
+        ) : <RichTextWithImages key={index} text={part} />
       )}
     </div>
   )
 }
 
 function OptionText({ text }: { text: string }) {
-  const normalized = text.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n")
-  const parts = normalized.split(/```/)
+  const parts = text.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").split(/```/)
   return (
     <div className="space-y-2">
       {parts.map((part, index) =>
@@ -195,11 +243,7 @@ function OptionText({ text }: { text: string }) {
           >
             {part.trim()}
           </pre>
-        ) : (
-          <div key={index} className="whitespace-pre-wrap break-all">
-            {part}
-          </div>
-        )
+        ) : <RichTextWithImages key={index} text={part} />
       )}
     </div>
   )
@@ -207,14 +251,6 @@ function OptionText({ text }: { text: string }) {
 
 function codingStatusLabel(status: "PENDING" | "REVIEWED") {
   return status === "REVIEWED" ? "已批改" : "待批改"
-}
-
-function normalizeMediaUrl(url?: string | null) {
-  if (!url) return ""
-  if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("http://")) {
-    return `https://${url.slice("http://".length)}`
-  }
-  return url
 }
 
 export default function ExerciseDetailClient() {
@@ -633,6 +669,31 @@ export default function ExerciseDetailClient() {
                 )
               })}
             </div>
+            {(() => {
+              const result = resultMap.get(currentStep.question.id)
+              if (!result || (!submitResult && !isReviewMode)) return null
+              const correctOptionIndex = currentStep.question.options.findIndex(
+                option => option.id === result.correctOptionId
+              )
+              const correctOption = currentStep.question.options.find(
+                option => option.id === result.correctOptionId
+              )
+              const correctLabel =
+                correctOptionIndex >= 0 ? `选项 ${correctOptionIndex + 1}` : "正确选项"
+              const explanation = (currentStep.question.explanation ?? "").trim()
+              return (
+                <div className="mt-5 rounded-[1.2rem] border border-sky-500/20 bg-sky-500/5 p-4 text-sm text-sky-900 dark:text-sky-100">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700 dark:text-sky-300">
+                    答案与解析
+                  </div>
+                  <div className="mt-2">
+                    正确答案：{correctLabel}
+                    {correctOption?.text?.trim() ? `（${correctOption.text.trim()}）` : ""}
+                  </div>
+                  {explanation ? <div className="mt-2 whitespace-pre-wrap">解析：{explanation}</div> : null}
+                </div>
+              )
+            })()}
           </div>
         ) : (
           <div className="grid gap-5 xl:grid-cols-2">

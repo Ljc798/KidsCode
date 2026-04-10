@@ -14,6 +14,7 @@ router.use(requireStudent)
 
 const asString = (value: unknown) =>
   typeof value === "string" ? value.trim() : ""
+const PROJECT_AI_REVIEW_WEBHOOK_URL = asEnvTrimmed(process.env.PROJECT_AI_REVIEW_WEBHOOK_URL)
 
 const CONTENT_LIMITS = {
   CPP: 100_000,
@@ -23,6 +24,130 @@ const CONTENT_LIMITS = {
 
 type ProjectKind = keyof typeof CONTENT_LIMITS
 type ProjectCategory = "CLASSROOM" | "PERSONAL"
+
+type ProjectAiReviewResult = {
+  feedback: string | null
+  workflowRunId: string | null
+}
+
+function asEnvTrimmed(value: string | undefined | null) {
+  if (!value) return ""
+  return value.trim()
+}
+
+function asObjectOrNull(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function pickFirstString(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return null
+}
+
+function parseDifyProjectReviewResponse(payload: unknown): ProjectAiReviewResult {
+  const root = asObjectOrNull(payload) ?? {}
+  const container =
+    asObjectOrNull(root.data)?.outputs ??
+    root.outputs ??
+    root.data ??
+    root
+  const output = asObjectOrNull(container) ?? {}
+  const feedback = pickFirstString(output, [
+    "teacher_feedback",
+    "aiSuggestedFeedback",
+    "feedback",
+    "comment"
+  ])
+  const workflowRunId = pickFirstString(root, [
+    "workflow_run_id",
+    "workflowRunId",
+    "run_id",
+    "task_id"
+  ])
+
+  return { feedback, workflowRunId }
+}
+
+async function triggerProjectAiReview(input: {
+  projectId: string
+  projectCreatedAt: string
+  studentId: string
+  kind: ProjectKind
+  category: ProjectCategory
+  title: string
+  uploaderName: string
+  weekNumber: number | null
+  ideaNote: string | null
+  commonMistakes: string | null
+  cppContent: string | null
+  scratchFile:
+    | {
+        objectKey: string
+        downloadUrl: string
+        fileName: string | null
+        mimeType: string | null
+        size: number | null
+      }
+    | null
+}) {
+  if (!PROJECT_AI_REVIEW_WEBHOOK_URL) return
+  if (input.category !== "CLASSROOM") return
+
+  try {
+    const response = await fetch(PROJECT_AI_REVIEW_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        project_id: input.projectId,
+        project_created_at: input.projectCreatedAt,
+        student_id: input.studentId,
+        project: {
+          kind: input.kind,
+          category: input.category,
+          title: input.title,
+          uploader_name: input.uploaderName,
+          week_number: input.weekNumber,
+          idea_note: input.ideaNote,
+          common_mistakes: input.commonMistakes,
+          cpp_content: input.cppContent,
+          scratch_file: input.scratchFile
+        }
+      })
+    })
+
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(
+        `dify webhook failed: ${response.status} ${
+          payload && typeof payload === "object" ? JSON.stringify(payload) : ""
+        }`
+      )
+    }
+
+    const parsed = parseDifyProjectReviewResponse(payload)
+    if (parsed.feedback) {
+      await prisma.studentProject.updateMany({
+        where: {
+          id: input.projectId,
+          reviewStatus: "PENDING",
+          reviewedAt: null
+        },
+        data: {
+          teacherComment: parsed.feedback
+        }
+      })
+    }
+  } catch (error: unknown) {
+    console.error("project ai review failed", {
+      projectId: input.projectId,
+      error
+    })
+  }
+}
 
 function formatMonthDay(value: Date) {
   return `${value.getMonth() + 1}-${value.getDate()}`
@@ -426,6 +551,30 @@ router.post("/", async (req: any, res) => {
       updatedAt: created.updatedAt.toISOString()
     }
   })
+
+  void triggerProjectAiReview({
+    projectId: created.id,
+    projectCreatedAt: created.createdAt.toISOString(),
+    studentId,
+    kind: created.kind as ProjectKind,
+    category: created.category as ProjectCategory,
+    title: created.title,
+    uploaderName: created.uploaderName ?? "",
+    weekNumber: created.weekNumber ?? null,
+    ideaNote: created.ideaNote ?? null,
+    commonMistakes: created.commonMistakes ?? null,
+    cppContent: created.kind === "CPP" ? content : null,
+    scratchFile:
+      created.kind === "SCRATCH" && created.objectKey
+        ? {
+            objectKey: created.objectKey,
+            downloadUrl: getSignedDownloadUrl(created.objectKey),
+            fileName: created.fileName ?? null,
+            mimeType: created.mimeType ?? null,
+            size: created.size ?? null
+          }
+        : null
+  })
 })
 
 router.patch("/:id", async (req: any, res) => {
@@ -610,6 +759,30 @@ router.patch("/:id", async (req: any, res) => {
       reviewedAt: updated.reviewedAt?.toISOString() ?? null,
       canDownload: updated.kind === "SCRATCH" && !!updated.objectKey
     }
+  })
+
+  void triggerProjectAiReview({
+    projectId: updated.id,
+    projectCreatedAt: updated.createdAt.toISOString(),
+    studentId,
+    kind: updated.kind as ProjectKind,
+    category: updated.category as ProjectCategory,
+    title: updated.title,
+    uploaderName: updated.uploaderName ?? uploaderName,
+    weekNumber: updated.weekNumber ?? null,
+    ideaNote: updated.ideaNote ?? null,
+    commonMistakes: updated.commonMistakes ?? null,
+    cppContent: updated.kind === "CPP" ? (updated.content ?? "") : null,
+    scratchFile:
+      updated.kind === "SCRATCH" && updated.objectKey
+        ? {
+            objectKey: updated.objectKey,
+            downloadUrl: getSignedDownloadUrl(updated.objectKey),
+            fileName: updated.fileName ?? null,
+            mimeType: updated.mimeType ?? null,
+            size: updated.size ?? null
+          }
+        : null
   })
 })
 

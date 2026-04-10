@@ -1,5 +1,6 @@
 import { Router } from "express"
 import { prisma } from "@kidscode/database"
+import { Prisma } from "@prisma/client"
 import { requireStudent } from "../middleware/requireStudent"
 import { shanghaiDateKey } from "../lib/studentHelper"
 import { createAdminNotificationForAll } from "../lib/adminNotification"
@@ -21,6 +22,12 @@ const router = Router()
 const EXERCISE_DAILY_POINTS_CAP = 200
 const EXERCISE_XP_PER_SUBMISSION = 20
 const EXERCISE_DAILY_XP_CAP = 100
+const EXERCISE_AI_REVIEW_WEBHOOK_URL = asEnvTrimmed(process.env.EXERCISE_AI_REVIEW_WEBHOOK_URL)
+
+function asEnvTrimmed(value: string | undefined | null) {
+  if (!value) return ""
+  return value.trim()
+}
 
 type ChoiceOption = {
   id: string
@@ -32,6 +39,7 @@ type MultipleChoiceQuestion = {
   id: string
   prompt: string
   promptImageUrl?: string | null
+  explanation?: string | null
   options: ChoiceOption[]
   correctOptionId: string
 }
@@ -88,6 +96,13 @@ type CodingSubmissionAnswer = {
   } | null
 }
 
+type ExerciseAiReviewResult = {
+  score: number | null
+  feedback: string | null
+  suggestionJson: Record<string, unknown> | null
+  workflowRunId: string | null
+}
+
 function computePointWeights(multipleChoiceCount: number, codingTaskCount: number) {
   const unitTotal = multipleChoiceCount + codingTaskCount * 2
   if (unitTotal <= 0) {
@@ -121,6 +136,147 @@ const asInt = (value: unknown) => {
     if (Number.isInteger(parsed)) return parsed
   }
   return NaN
+}
+
+function asNumberOrNull(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function asObjectOrNull(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function pickFirstString(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return null
+}
+
+function parseDifyReviewResponse(payload: unknown): ExerciseAiReviewResult {
+  const root = asObjectOrNull(payload) ?? {}
+  const container =
+    asObjectOrNull(root.data)?.outputs ??
+    root.outputs ??
+    root.data ??
+    root
+  const output = asObjectOrNull(container) ?? {}
+
+  const scoreRaw =
+    output.total_score ??
+    output.aiSuggestedScore ??
+    output.score ??
+    output.suggested_score
+  const scoreParsed = asNumberOrNull(scoreRaw)
+  const score = scoreParsed === null ? null : Math.max(0, Math.round(scoreParsed))
+  const feedback = pickFirstString(output, [
+    "teacher_feedback",
+    "aiSuggestedFeedback",
+    "feedback",
+    "comment"
+  ])
+  const workflowRunId = pickFirstString(root, [
+    "workflow_run_id",
+    "workflowRunId",
+    "run_id",
+    "task_id"
+  ])
+
+  return {
+    score,
+    feedback,
+    suggestionJson: Object.keys(output).length > 0 ? output : null,
+    workflowRunId
+  }
+}
+
+async function triggerExerciseAiReview(input: {
+  submissionId: string
+  submissionCreatedAt: string
+  studentId: string
+  exercise: {
+    id: string
+    slug: string
+    title: string
+    summary: string | null
+  }
+  multipleChoice: MultipleChoiceQuestion[]
+  codingTasks: CodingTask[]
+  results: SubmissionResult[]
+  codingAnswerList: Array<{
+    taskId: string
+    title: string
+    answerMode: "TEXT" | "SCRATCH_FILE"
+    answer: string
+    scratchFile: {
+      objectKey: string
+      fileName: string
+      mimeType: string
+      size: number
+      downloadUrl: string
+    } | null
+  }>
+}) {
+  if (!EXERCISE_AI_REVIEW_WEBHOOK_URL) return
+
+  try {
+    const response = await fetch(EXERCISE_AI_REVIEW_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        submission_id: input.submissionId,
+        submission_created_at: input.submissionCreatedAt,
+        student_id: input.studentId,
+        exercise: input.exercise,
+        multiple_choice_questions: input.multipleChoice,
+        multiple_choice_results: input.results,
+        coding_tasks: input.codingTasks,
+        coding_answers: input.codingAnswerList
+      })
+    })
+
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(
+        `dify webhook failed: ${response.status} ${
+          payload && typeof payload === "object" ? JSON.stringify(payload) : ""
+        }`
+      )
+    }
+
+    const parsed = parseDifyReviewResponse(payload)
+    await prisma.exerciseSubmission.update({
+      where: { id: input.submissionId },
+      data: {
+        aiReviewStatus: "DONE",
+        aiSuggestedScore: parsed.score,
+        aiSuggestedFeedback: parsed.feedback,
+        aiSuggestionJson: parsed.suggestionJson
+          ? (parsed.suggestionJson as Prisma.InputJsonObject)
+          : undefined,
+        aiWorkflowRunId: parsed.workflowRunId,
+        aiReviewedAt: new Date()
+      }
+    })
+  } catch (error: unknown) {
+    console.error("exercise ai review failed", error)
+    await prisma.exerciseSubmission.update({
+      where: { id: input.submissionId },
+      data: {
+        aiReviewStatus: "FAILED",
+        aiReviewedAt: new Date()
+      }
+    })
+  }
 }
 
 function requireStudentOrAdmin(req: any, res: any, next: any) {
@@ -211,6 +367,9 @@ function isMultipleChoiceQuestion(
     (item.promptImageUrl !== undefined &&
       item.promptImageUrl !== null &&
       typeof item.promptImageUrl !== "string") ||
+    (item.explanation !== undefined &&
+      item.explanation !== null &&
+      typeof item.explanation !== "string") ||
     !Array.isArray(item.options)
   ) {
     return false
@@ -282,6 +441,17 @@ function parseMultipleChoice(value: unknown): MultipleChoiceQuestion[] | null {
     if (!question.promptImageUrl && legacyPromptImage) {
       ;(question as MultipleChoiceQuestion & { promptImageUrl?: string | null }).promptImageUrl =
         legacyPromptImage.trim()
+    }
+    const legacyExplanationCandidates = [
+      rawQuestion.analysis,
+      rawQuestion.answerAnalysis,
+      rawQuestion.explain
+    ]
+    const legacyExplanation = legacyExplanationCandidates
+      .find(item => typeof item === "string" && item.trim()) as string | undefined
+    if (!question.explanation && legacyExplanation) {
+      ;(question as MultipleChoiceQuestion & { explanation?: string | null }).explanation =
+        legacyExplanation.trim()
     }
 
     if (!question.id.trim() || !question.prompt.trim()) return null
@@ -629,6 +799,7 @@ router.get("/:slug", requireStudent, async (req, res) => {
       id: question.id,
       prompt: question.prompt,
       promptImageUrl: question.promptImageUrl ?? null,
+      explanation: question.explanation ?? null,
       options: shuffle(question.options)
     }))
   })
@@ -1100,6 +1271,22 @@ router.post("/:slug/submissions", requireStudent, async (req: any, res) => {
     codingMaxPoints: out.submission.codingMaxPoints,
     reward: out.reward,
     results
+  })
+
+  void triggerExerciseAiReview({
+    submissionId: out.submission.id,
+    submissionCreatedAt: out.submission.createdAt.toISOString(),
+    studentId,
+    exercise: {
+      id: bank.id,
+      slug,
+      title: bank.title,
+      summary: null
+    },
+    multipleChoice,
+    codingTasks,
+    results,
+    codingAnswerList
   })
 })
 

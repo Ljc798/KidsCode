@@ -1,0 +1,50 @@
+[
+  {
+    "id": "ec5ebd85-8f15-4368-9013-eb5bd014239b",
+    "kind": "ZIP",
+    "title": "3",
+    "description": "3",
+    "weekTag": "3",
+    "cppCode": null,
+    "fileName": "素材.zip",
+    "mimeType": "application/zip",
+    "size": 329790,
+    "objectKey": "teaching-materials/zip/3/3/1775799371106-素材.zip",
+    "bucket": "kidscode-1348081197",
+    "storageProvider": "cos",
+    "createdAt": "2026-04-10T05:36:12.086Z",
+    "updatedAt": "2026-04-10T05:36:12.086Z"
+  },
+  {
+    "id": "5e4c2e15-bf02-49df-a85b-34e582b4e422",
+    "kind": "SCRATCH",
+    "title": "2",
+    "description": "2",
+    "weekTag": "2",
+    "cppCode": null,
+    "fileName": "猜数字-最终版本.sb3",
+    "mimeType": "application/octet-stream",
+    "size": 393258,
+    "objectKey": "teaching-materials/scratch/2/2/1775798639114-猜数字-最终版本.sb3",
+    "bucket": "kidscode-1348081197",
+    "storageProvider": "cos",
+    "createdAt": "2026-04-10T05:23:59.997Z",
+    "updatedAt": "2026-04-10T05:23:59.997Z"
+  },
+  {
+    "id": "c32924a9-90a8-49ac-9248-997ff7a53b60",
+    "kind": "CPP",
+    "title": "1",
+    "description": "1",
+    "weekTag": "1",
+    "cppCode": "1111",
+    "fileName": null,
+    "mimeType": null,
+    "size": null,
+    "objectKey": null,
+    "bucket": null,
+    "storageProvider": null,
+    "createdAt": "2026-04-10T05:23:30.267Z",
+    "updatedAt": "2026-04-10T05:23:30.267Z"
+  }
+]

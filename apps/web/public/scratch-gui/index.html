@@ -35,7 +35,7 @@
         try {
           window.localStorage.setItem("kidscode-scratch-locale", forcedLocale)
         } catch (e) {}
-        var localAssetHost = window.location.origin
+        var localOrigin = window.location.origin
         var appInstance = null
         var SDK = window.GUI
         if (!SDK) return
@@ -54,8 +54,8 @@
             isPlayerOnly: false,
             isFullScreen: false,
             locale: forcedLocale,
-            projectHost: "https://projects.scratch.mit.edu",
-            assetHost: localAssetHost
+            projectHost: localOrigin,
+            assetHost: localOrigin
           }),
           document.getElementById("app")
         )

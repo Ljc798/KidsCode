@@ -55,6 +55,7 @@
         var projectParam = search.get("project")
         var locale = (search.get("locale") || "zh-cn").toLowerCase()
         var SDK = window.GUI
+        var localOrigin = window.location.origin
 
         function setStatus(message, isError) {
           if (!statusEl) return
@@ -95,8 +96,8 @@
             isPlayerOnly: true,
             isFullScreen: false,
             locale: locale,
-            projectHost: "https://projects.scratch.mit.edu",
-            assetHost: window.location.origin
+            projectHost: localOrigin,
+            assetHost: localOrigin
           }),
           document.getElementById("app")
         )

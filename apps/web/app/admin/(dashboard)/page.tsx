@@ -75,6 +75,19 @@ export default function AdminHomePage() {
             Open controls
           </div>
         </Link>
+
+        <Link
+          href="/admin/materials"
+          className="group rounded-2xl border border-black/5 bg-gradient-to-b from-white to-zinc-50 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:from-zinc-950 dark:to-zinc-900"
+        >
+          <div className="text-sm font-semibold">Materials</div>
+          <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+            Store Scratch teaching files and C++ standard-answer snippets for class.
+          </div>
+          <div className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+            Open library
+          </div>
+        </Link>
       </div>
     </div>
   )

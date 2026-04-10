@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server"
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl
 
-  // Admin protection 111
+  // Admin protection
   if (pathname.startsWith("/admin")) {
     if (pathname === "/admin/login") return NextResponse.next()
     if (pathname.startsWith("/admin/login/")) return NextResponse.next()

@@ -15,6 +15,7 @@ type MultipleChoiceQuestion = {
   id: string
   prompt: string
   promptImageUrl?: string | null
+  explanation?: string | null
   options: ChoiceOption[]
   correctOptionId: string
 }
@@ -110,6 +111,9 @@ function isMultipleChoiceQuestion(
     (item.promptImageUrl !== undefined &&
       item.promptImageUrl !== null &&
       typeof item.promptImageUrl !== "string") ||
+    (item.explanation !== undefined &&
+      item.explanation !== null &&
+      typeof item.explanation !== "string") ||
     !Array.isArray(item.options)
   ) {
     return false
@@ -188,6 +192,17 @@ function parseMultipleChoice(
     if (!question.promptImageUrl && legacyPromptImage) {
       ;(question as MultipleChoiceQuestion & { promptImageUrl?: string | null }).promptImageUrl =
         legacyPromptImage.trim()
+    }
+    const legacyExplanationCandidates = [
+      rawQuestion.analysis,
+      rawQuestion.answerAnalysis,
+      rawQuestion.explain
+    ]
+    const legacyExplanation = legacyExplanationCandidates
+      .find(item => typeof item === "string" && item.trim()) as string | undefined
+    if (!question.explanation && legacyExplanation) {
+      ;(question as MultipleChoiceQuestion & { explanation?: string | null }).explanation =
+        legacyExplanation.trim()
     }
 
     if (!question.id.trim() || !question.prompt.trim()) return null

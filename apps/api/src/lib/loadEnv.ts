@@ -28,7 +28,9 @@ const candidates = roots.flatMap(root => [
   path.join(root, ".env"),
   path.join(root, ".env.local"),
   path.join(root, "apps/api/.env"),
-  path.join(root, "apps/api/.env.local")
+  path.join(root, "apps/api/.env.local"),
+  path.join(root, "packages/database/.env"),
+  path.join(root, "packages/database/.env.local")
 ])
 
 for (const file of candidates) {
