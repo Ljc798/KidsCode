@@ -104,13 +104,6 @@ export default async function DownloadsPage() {
               <h1 className="mt-2 text-2xl font-semibold tracking-tight">
                 素材下载
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                老师会把课堂素材放在这里，孩子们点击右侧按钮即可下载。服务器素材目录：
-                <span className="font-mono text-zinc-900 dark:text-zinc-100">
-                  {" "}
-                  {downloadRoot}
-                </span>
-              </p>
             </div>
             <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-sm font-semibold text-sky-800 dark:text-sky-100">
               共 {files.length} 个文件
@@ -122,9 +115,6 @@ export default async function DownloadsPage() {
               <h2 className="text-base font-semibold text-zinc-950 dark:text-white">
                 暂无可下载素材
               </h2>
-              <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-                把文件放入服务器素材目录后刷新页面即可显示。
-              </p>
             </div>
           ) : (
             <div className="mt-6 space-y-6">
