@@ -12,6 +12,7 @@ export default function TopNav({
     | "knowledge"
     | "scratch"
     | "materials"
+    | "downloads"
     | "me"
 }) {
   const item = (
@@ -25,6 +26,7 @@ export default function TopNav({
       | "knowledge"
       | "scratch"
       | "materials"
+      | "downloads"
       | "me"
   ) => {
     const isActive = active === key
@@ -61,6 +63,7 @@ export default function TopNav({
           {item("/games", "游戏大全", "games")}
           {item("/exercises", "习题大全", "exercises")}
           {item("/materials", "课件资源", "materials")}
+          {item("/downloads", "素材下载", "downloads")}
           {item("/scratch/studio", "Scratch", "scratch")}
           {item("/pet", "电子宠物", "pet")}
           {item("/knowledge/cpp", "知识大全", "knowledge")}
