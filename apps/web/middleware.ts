@@ -4,6 +4,10 @@ import type { NextRequest } from "next/server"
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl
 
+  if (pathname === "/downloads" || pathname.startsWith("/downloads/")) {
+    return NextResponse.next()
+  }
+
   // Admin protection
   if (pathname.startsWith("/admin")) {
     if (pathname === "/admin/login") return NextResponse.next()
@@ -49,5 +53,11 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/play/:path*", "/exercises/:path*", "/pet/:path*"]
+  matcher: [
+    "/admin/:path*",
+    "/play/:path*",
+    "/exercises/:path*",
+    "/pet/:path*",
+    "/downloads/:path*"
+  ]
 }

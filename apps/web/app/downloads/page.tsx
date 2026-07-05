@@ -1,6 +1,7 @@
-import { readdir, stat } from "node:fs/promises"
+import { readFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import TopNav from "@/app/components/TopNav"
+import CodeCopyButton from "./CodeCopyButton"
 import { downloadRoot } from "./downloadConfig"
 
 export const dynamic = "force-dynamic"
@@ -11,6 +12,7 @@ type DownloadFile = {
   folder: string
   size: number
   updatedAt: Date
+  content: string
 }
 
 async function readDownloadFiles(
@@ -41,14 +43,18 @@ async function readDownloadFiles(
           return []
         }
 
-        const fileStat = await stat(absolutePath)
+        const [fileStat, content] = await Promise.all([
+          stat(absolutePath),
+          readFile(absolutePath, "utf8")
+        ])
         return [
           {
             name: entry.name,
             relativePath,
             folder: basePath || "全部素材",
             size: fileStat.size,
-            updatedAt: fileStat.mtime
+            updatedAt: fileStat.mtime,
+            content
           }
         ]
       })
@@ -76,13 +82,6 @@ function formatDate(date: Date) {
   }).format(date)
 }
 
-function toDownloadHref(relativePath: string) {
-  return `/downloads/files/${relativePath
-    .split(path.sep)
-    .map(segment => encodeURIComponent(segment))
-    .join("/")}`
-}
-
 export default async function DownloadsPage() {
   const files = await readDownloadFiles()
   const groupedFiles = files.reduce<Record<string, DownloadFile[]>>((groups, file) => {
@@ -102,8 +101,11 @@ export default async function DownloadsPage() {
                 Download Center
               </p>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-                素材下载
+                代码素材
               </h1>
+              <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+                直接查看并复制代码，避免不同操作系统的字体和文件格式差异。
+              </p>
             </div>
             <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-sm font-semibold text-sky-800 dark:text-sky-100">
               共 {files.length} 个文件
@@ -123,47 +125,28 @@ export default async function DownloadsPage() {
                   <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-200">
                     {folder}
                   </h2>
-                  <div className="overflow-hidden rounded-2xl border border-black/10 bg-white/65 dark:border-white/10 dark:bg-zinc-950/35">
-                    <div className="grid grid-cols-12 gap-3 bg-zinc-950/10 px-4 py-3 text-xs font-semibold text-zinc-700 dark:bg-white/5 dark:text-zinc-200">
-                      <div className="col-span-6 sm:col-span-7">文件名</div>
-                      <div className="col-span-3 sm:col-span-2">大小</div>
-                      <div className="hidden sm:col-span-2 sm:block">更新日期</div>
-                      <div className="col-span-3 sm:col-span-1 text-right">操作</div>
-                    </div>
-                    <div className="divide-y divide-black/10 text-sm dark:divide-white/10">
-                      {folderFiles.map(file => (
-                        <div
-                          key={file.relativePath}
-                          className="grid grid-cols-12 items-center gap-3 px-4 py-3"
-                        >
-                          <div className="col-span-6 min-w-0 sm:col-span-7">
-                            <div className="truncate font-medium text-zinc-950 dark:text-white">
+                  <div className="space-y-4">
+                    {folderFiles.map(file => (
+                      <article
+                        key={file.relativePath}
+                        className="overflow-hidden rounded-2xl border border-black/10 bg-white/65 dark:border-white/10 dark:bg-zinc-950/35"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 px-4 py-3 dark:border-white/10">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-zinc-950 dark:text-white">
                               {file.name}
                             </div>
-                            {file.folder !== "全部素材" ? (
-                              <div className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                                {file.relativePath}
-                              </div>
-                            ) : null}
+                            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                              {formatSize(file.size)} · {formatDate(file.updatedAt)}
+                            </div>
                           </div>
-                          <div className="col-span-3 text-xs text-zinc-600 dark:text-zinc-300 sm:col-span-2">
-                            {formatSize(file.size)}
-                          </div>
-                          <div className="hidden text-xs text-zinc-600 dark:text-zinc-300 sm:col-span-2 sm:block">
-                            {formatDate(file.updatedAt)}
-                          </div>
-                          <div className="col-span-3 flex justify-end sm:col-span-1">
-                            <a
-                              href={toDownloadHref(file.relativePath)}
-                              download
-                              className="inline-flex h-8 items-center justify-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-200"
-                            >
-                              下载
-                            </a>
-                          </div>
+                          <CodeCopyButton code={file.content} />
                         </div>
-                      ))}
-                    </div>
+                        <pre className="max-h-[32rem] overflow-auto bg-zinc-950 p-4 text-sm leading-6 text-zinc-100">
+                          <code>{file.content}</code>
+                        </pre>
+                      </article>
+                    ))}
                   </div>
                 </section>
               ))}
