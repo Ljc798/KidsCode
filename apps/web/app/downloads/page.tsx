@@ -1,7 +1,7 @@
-import { readFile, readdir, stat } from "node:fs/promises"
+import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
+import Link from "next/link"
 import TopNav from "@/app/components/TopNav"
-import CodeCopyButton from "./CodeCopyButton"
 import { downloadRoot } from "./downloadConfig"
 
 export const dynamic = "force-dynamic"
@@ -12,7 +12,6 @@ type DownloadFile = {
   folder: string
   size: number
   updatedAt: Date
-  content: string
 }
 
 async function readDownloadFiles(
@@ -43,18 +42,14 @@ async function readDownloadFiles(
           return []
         }
 
-        const [fileStat, content] = await Promise.all([
-          stat(absolutePath),
-          readFile(absolutePath, "utf8")
-        ])
+        const fileStat = await stat(absolutePath)
         return [
           {
             name: entry.name,
             relativePath,
             folder: basePath || "全部素材",
             size: fileStat.size,
-            updatedAt: fileStat.mtime,
-            content
+            updatedAt: fileStat.mtime
           }
         ]
       })
@@ -82,6 +77,13 @@ function formatDate(date: Date) {
   }).format(date)
 }
 
+function toFileHref(relativePath: string) {
+  return relativePath
+    .split(path.sep)
+    .map(segment => encodeURIComponent(segment))
+    .join("/")
+}
+
 export default async function DownloadsPage() {
   const files = await readDownloadFiles()
   const groupedFiles = files.reduce<Record<string, DownloadFile[]>>((groups, file) => {
@@ -101,10 +103,10 @@ export default async function DownloadsPage() {
                 Download Center
               </p>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-                代码素材
+                素材下载
               </h1>
               <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-                直接查看并复制代码，避免不同操作系统的字体和文件格式差异。
+                C++ 源文件可以在线查看并复制，其他素材仍可直接下载。
               </p>
             </div>
             <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-sm font-semibold text-sky-800 dark:text-sky-100">
@@ -125,27 +127,37 @@ export default async function DownloadsPage() {
                   <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-200">
                     {folder}
                   </h2>
-                  <div className="space-y-4">
+                  <div className="overflow-hidden rounded-2xl border border-black/10 bg-white/65 dark:border-white/10 dark:bg-zinc-950/35">
                     {folderFiles.map(file => (
-                      <article
+                      <div
                         key={file.relativePath}
-                        className="overflow-hidden rounded-2xl border border-black/10 bg-white/65 dark:border-white/10 dark:bg-zinc-950/35"
+                        className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 px-4 py-3 last:border-b-0 dark:border-white/10"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 px-4 py-3 dark:border-white/10">
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-zinc-950 dark:text-white">
-                              {file.name}
-                            </div>
-                            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                              {formatSize(file.size)} · {formatDate(file.updatedAt)}
-                            </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-zinc-950 dark:text-white">
+                            {file.name}
                           </div>
-                          <CodeCopyButton code={file.content} />
+                          <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                            {formatSize(file.size)} · {formatDate(file.updatedAt)}
+                          </div>
                         </div>
-                        <pre className="max-h-[32rem] overflow-auto bg-zinc-950 p-4 text-sm leading-6 text-zinc-100">
-                          <code>{file.content}</code>
-                        </pre>
-                      </article>
+                        {path.extname(file.name).toLowerCase() === ".cpp" ? (
+                          <Link
+                            href={`/downloads/code/${toFileHref(file.relativePath)}`}
+                            className="inline-flex h-9 items-center justify-center rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 text-xs font-semibold text-sky-700 hover:bg-sky-500/20 dark:text-sky-200"
+                          >
+                            查看代码
+                          </Link>
+                        ) : (
+                          <a
+                            href={`/downloads/files/${toFileHref(file.relativePath)}`}
+                            download
+                            className="inline-flex h-9 items-center justify-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-200"
+                          >
+                            下载
+                          </a>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </section>
