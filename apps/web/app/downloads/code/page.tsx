@@ -3,23 +3,23 @@ import path from "node:path"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import TopNav from "@/app/components/TopNav"
-import CodeCopyButton from "../../CodeCopyButton"
-import { downloadRoot } from "../../downloadConfig"
+import CodeCopyButton from "../CodeCopyButton"
+import { downloadRoot } from "../downloadConfig"
 
 export const dynamic = "force-dynamic"
 
 type PageProps = {
-  params: Promise<{ path: string[] }>
+  searchParams: Promise<{ path?: string | string[] }>
 }
 
-export default async function CodeDetailPage({ params }: PageProps) {
-  const segments = (await params).path
-  const relativePath = segments.join(path.sep)
-  const absolutePath = path.resolve(downloadRoot, relativePath)
+export default async function CodeDetailPage({ searchParams }: PageProps) {
+  const requestedPath = (await searchParams).path
+  if (typeof requestedPath !== "string" || !requestedPath) notFound()
+
+  const absolutePath = path.resolve(downloadRoot, requestedPath)
   const relativeToRoot = path.relative(downloadRoot, absolutePath)
 
   if (
-    !segments.length ||
     path.extname(absolutePath).toLowerCase() !== ".cpp" ||
     relativeToRoot.startsWith("..") ||
     path.isAbsolute(relativeToRoot)
@@ -48,7 +48,7 @@ export default async function CodeDetailPage({ params }: PageProps) {
               </Link>
               <h1 className="mt-2 truncate text-xl font-semibold">{fileName}</h1>
               <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                {relativePath}
+                {requestedPath}
               </p>
             </div>
             <CodeCopyButton code={code} />

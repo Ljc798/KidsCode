@@ -143,7 +143,7 @@ export default async function DownloadsPage() {
                         </div>
                         {path.extname(file.name).toLowerCase() === ".cpp" ? (
                           <Link
-                            href={`/downloads/code/${toFileHref(file.relativePath)}`}
+                            href={`/downloads/code?path=${encodeURIComponent(file.relativePath)}`}
                             className="inline-flex h-9 items-center justify-center rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 text-xs font-semibold text-sky-700 hover:bg-sky-500/20 dark:text-sky-200"
                           >
                             查看代码
