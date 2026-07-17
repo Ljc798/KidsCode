@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import ChatWidget from "@/app/components/ChatWidget"
+import ServiceNotice from "@/app/components/ServiceNotice"
 
 export const metadata: Metadata = {
   title: "KidsCode",
@@ -21,6 +22,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         {children}
+        <ServiceNotice />
         <ChatWidget />
       </body>
     </html>
