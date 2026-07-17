@@ -3,6 +3,7 @@ import Link from "next/link"
 import FeaturedMiniGames from "@/app/components/FeaturedMiniGames"
 import HomeDashboardCards from "@/app/components/HomeDashboardCards"
 import HomeLeaderboards from "@/app/components/HomeLeaderboards"
+import ServiceNotice from "@/app/components/ServiceNotice"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -10,6 +11,7 @@ export const revalidate = 0
 export default function Home() {
   return (
     <div className="min-h-screen bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.100),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.100),transparent)] dark:bg-[radial-gradient(900px_450px_at_10%_10%,theme(colors.fuchsia.950),transparent),radial-gradient(800px_400px_at_80%_20%,theme(colors.lime.950),transparent)]">
+      <ServiceNotice />
       <TopNav active="home" />
       <main className="mx-auto max-w-6xl px-4 py-10">
         <section className="relative overflow-hidden rounded-[2rem] border border-black/5 bg-white/70 p-7 shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-950/50 sm:p-10">

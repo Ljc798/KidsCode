@@ -1,14 +1,9 @@
 "use client"
 
-// TODO: 停服时将此处改为 true
-const SERVICE_NOTICE_ACTIVE = false
-
 import { useEffect, useState } from "react"
 
 export default function ServiceNotice() {
   const [dismissed, setDismissed] = useState(false)
-
-  if (!SERVICE_NOTICE_ACTIVE) return null
 
   useEffect(() => {
     // 禁止页面滚动
