@@ -1,9 +1,14 @@
 "use client"
 
+// TODO: 停服时将此处改为 true
+const SERVICE_NOTICE_ACTIVE = false
+
 import { useEffect, useState } from "react"
 
 export default function ServiceNotice() {
   const [dismissed, setDismissed] = useState(false)
+
+  if (!SERVICE_NOTICE_ACTIVE) return null
 
   useEffect(() => {
     // 禁止页面滚动
@@ -32,10 +37,12 @@ export default function ServiceNotice() {
         <div className="absolute -left-4 bottom-4 text-3xl select-none pointer-events-none">💌</div>
 
         <div className="text-center">
+          {/* 标题 */}
           <h2 className="text-xl font-extrabold text-amber-600 dark:text-amber-400">
             📢 小通知
           </h2>
 
+          {/* 正文 — 告知停服日期 */}
           <p className="mt-4 text-base leading-7 text-zinc-700 dark:text-zinc-200">
             亲爱的小同学，我们的网站要给自己放个小假啦～
           </p>
@@ -44,6 +51,7 @@ export default function ServiceNotice() {
             起网站会暂停服务哦。
           </p>
 
+          {/* 微信联系方式 — 虚线框突出显示 */}
           <div className="mt-5 rounded-2xl border border-dashed border-sky-300 bg-sky-50/80 px-4 py-3 dark:border-sky-700 dark:bg-sky-950/40">
             <p className="text-sm text-zinc-700 dark:text-zinc-200">
               如果需要获取数据，或者想跟老师聊天，
@@ -56,6 +64,7 @@ export default function ServiceNotice() {
             </p>
           </div>
 
+          {/* 结尾 */}
           <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500">
             谢谢你的理解，我们很快会再见面的！🌈
           </p>
